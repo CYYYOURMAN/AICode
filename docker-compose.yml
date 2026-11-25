@@ -7,7 +7,10 @@
 # Linux 服务器上 host 网络最简单（macOS/Windows 不支持 host 网络，请用 Linux）。
 services:
   aicode:
-    build: ./gateway
+    build:
+      context: ./gateway
+      # 构建阶段也用 host 网络（某些环境 docker bridge 出站被阻断）
+      network: host
     network_mode: host
     restart: unless-stopped
     environment:
