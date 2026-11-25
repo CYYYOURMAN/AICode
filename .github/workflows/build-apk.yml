@@ -28,6 +28,17 @@ jobs:
         with:
           gradle-version: "8.9"
 
+      - name: Install Android platform 35
+        run: |
+          SDKMANAGER="${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then SDKMANAGER="$(command -v sdkmanager || true)"; fi
+          echo "sdkmanager: $SDKMANAGER"
+          if [ -n "$SDKMANAGER" ]; then
+            (yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true)
+            "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0" || true
+          fi
+          ls "${ANDROID_HOME}/platforms" || true
+
       - name: Build release APK
         working-directory: android
         run: gradle assembleRelease --no-daemon --console=plain 2>&1 | tee /tmp/build.log
@@ -44,9 +55,25 @@ jobs:
         if: failure()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
-          tail -c 6000 /tmp/build.log > /tmp/err.txt || true
-          gh issue create --title "CI build failed (${{ github.ref_name }})" --body-file /tmp/err.txt || true
+          python3 - <<'PYEOF'
+          import json, os, urllib.request
+          try:
+              body = open('/tmp/build.log', errors='replace').read()[-5000:]
+          except Exception:
+              body = 'no build.log'
+          payload = json.dumps({'title': 'CI failure ' + os.environ.get('REF_NAME', ''), 'body': body}).encode()
+          req = urllib.request.Request(
+              'https://api.github.com/repos/CYYYOURMAN/AICode/issues',
+              data=payload,
+              headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'],
+                       'Accept': 'application/vnd.github+json'})
+          try:
+              urllib.request.urlopen(req, timeout=15)
+          except Exception as e:
+              print('issue report failed:', e)
+          PYEOF
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
