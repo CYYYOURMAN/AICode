@@ -24,9 +24,21 @@ jobs:
         with:
           gradle-version: "8.9"
 
+      - name: Install Android platform 35 (if missing)
+        run: |
+          sdkmanager --list_installed 2>/dev/null | grep -q "platforms;android-35" || sdkmanager "platforms;android-35" "build-tools;35.0.0" >/dev/null
+
       - name: Build release APK
         working-directory: android
-        run: gradle assembleRelease --no-daemon --console=plain
+        run: gradle assembleRelease --no-daemon --console=plain 2>&1 | tee /tmp/build.log
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: /tmp/build.log
+          if-no-files-found: ignore
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
