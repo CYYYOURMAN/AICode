@@ -1,5 +1,7 @@
 # AIcode
 
+[![build-apk](https://github.com/CYYYOURMAN/AICode/actions/workflows/build-apk.yml/badge.svg)](https://github.com/CYYYOURMAN/AICode/actions/workflows/build-apk.yml)
+
 **把一台自己的 Linux 服务器变成「AI 手机助手」。**
 手机 App 连上你自己托管的 [DSH](https://github.com/deepseek-ai/deepseek-harness) 引擎：
 能对话、读写文件、跑命令、操作手机——数据和服务全在你自己手里。
@@ -119,7 +121,12 @@ AICode/
 ├── android/                 # Android App（Kotlin + Compose）
 │   ├── app/src/main/java/com/aicode/app/...
 │   └── ...
+├── docs/
+│   ├── HTTPS.md             # 外网访问：Tailscale / Caddy / Nginx
+│   └── MCP.md               # 自定义 MCP 集成（鱼世界示例）
+├── .github/                 # issue/PR 模板、CI 构建 APK
 ├── SECURITY.md
+├── CONTRIBUTING.md
 ├── README.md
 └── LICENSE
 ```
@@ -131,6 +138,13 @@ AICode/
 - [x] M2：App 连接向导（地址 + 配对码）、运行时配置、连接诊断
 - [x] M3：App 源码开源、去个人化、版本号自动递增
 - [ ] M4：社区化（issue 模板、示例 MCP、HTTPS 指南）
+
+## 文档
+
+- [外网访问 / HTTPS 指南](docs/HTTPS.md)
+- [自定义 MCP 集成](docs/MCP.md)
+- [贡献指南](CONTRIBUTING.md)
+- [安全模型](SECURITY.md)
 
 ## License
 
