@@ -35,7 +35,19 @@
 - 一个 DSH 能用的模型 API key（当前是 DeepSeek 官方 key）；
 - 手机：Android 8.0+。
 
-## 快速开始（服务端）
+## 最省事：让你的 AI 装（推荐）
+
+不用照下面手动敲。把这段发给你的 AI（Claude / ChatGPT / DeepSeek 都行），它会在你的服务器上装好：
+
+> 请帮我在服务器上部署 AIcode（自托管 AI 助手），按这份文档操作：
+> https://cyyyourman.github.io/AICode/deploy-for-ai.md
+> 服务器已经装好 Docker。装好后告诉我「服务器地址」和「配对码」。
+
+部署指南每一步都有验证方法：装完会验网关、配对码、引擎端口，以及**模型 key 是不是真的能用**
+（没这一步的话，假 key 也会显示「部署成功」，但 App 一说话就失败）。
+2026-11-26 用独立的 AI 从零实测三轮，暴露的坑已修完；卡在哪里看 [常见问题](pages/troubleshooting.md)。
+
+## 快速开始（服务端，手动）
 
 ```bash
 git clone https://github.com/CYYYOURMAN/AICode.git aicode && cd aicode
