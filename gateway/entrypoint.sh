@@ -3,6 +3,11 @@ set -eu
 
 mkdir -p /data
 
+if [ -z "${DEEPSEEK_API_KEY:-}" ]; then
+  echo "[entrypoint] 错误：没有 DEEPSEEK_API_KEY，请在 .env 里配置（cp .env.example .env）" >&2
+  exit 1
+fi
+
 DSH_PORT="${DSH_PORT:-3080}"
 DSH_HOST="${DSH_HOST:-127.0.0.1}"
 
