@@ -4,12 +4,19 @@
 #   curl -fsSL "$SITE/install.sh" | AICODE_SITE="$SITE" bash
 # 或下载后：AICODE_SITE="$SITE" bash install.sh
 #
-# 只做：检查环境 → 下载部署包 → 解压 → 复制 .env → 跑部署前体检。
+# 只做：检查环境 → 下载部署包 → 解压 → 复制 .env → 写入端口 → 跑部署前体检。
 # 不会替你填 API key，也不会自动启动服务（下一步会打印出来）。
+#
+# 可选环境变量：
+#   AICODE_DIR            部署目录（默认 ~/aicode）
+#   AICODE_GATEWAY_PORT   网关端口（写进 .env）
+#   AICODE_DSH_PORT       引擎端口（写进 .env）
 set -euo pipefail
 
 SITE="${AICODE_SITE:-https://cyyyourman.github.io/AICode}"
 DEST="${AICODE_DIR:-$HOME/aicode}"
+GW="${AICODE_GATEWAY_PORT:-}"
+DSH="${AICODE_DSH_PORT:-}"
 TARBALL="$(mktemp -t aicode-deploy.XXXXXX.tar.gz)"
 trap 'rm -f "$TARBALL"' EXIT
 
@@ -25,17 +32,29 @@ tar xzf "$TARBALL" -C "$DEST"
 cd "$DEST"
 [ -f .env ] || cp .env.example .env
 
+set_env() { # key value
+  if grep -qE "^$1=" .env; then
+    sed -i "s|^$1=.*|$1=$2|" .env
+  else
+    printf '%s=%s\n' "$1" "$2" >> .env
+  fi
+}
+[ -n "$GW" ] && set_env GATEWAY_PORT "$GW"
+[ -n "$DSH" ] && set_env DSH_PORT "$DSH"
+
 echo
 if [ -f preflight.sh ]; then
   echo "== 部署前体检 =="
-  GATEWAY_PORT="$(grep -E '^GATEWAY_PORT=' .env | cut -d= -f2)" DSH_PORT="$(grep -E '^DSH_PORT=' .env | cut -d= -f2)" \
-    AICODE_DIR="$DEST" bash preflight.sh || echo "（体检有 FAIL：按上面的提示先修，再继续）"
+  AICODE_DIR="$DEST" bash preflight.sh || echo "（体检有 FAIL：按上面的提示先修，再继续）"
   echo
 fi
 
-echo "部署包已解压到：$DEST"
+GW_NOW=$(grep -E '^GATEWAY_PORT=' .env | cut -d= -f2); GW_NOW="${GW_NOW:-3300}"
+DSH_NOW=$(grep -E '^DSH_PORT=' .env | cut -d= -f2); DSH_NOW="${DSH_NOW:-3080}"
+
+echo "部署包已解压到：$DEST（网关端口 $GW_NOW，引擎端口 $DSH_NOW）"
 echo "下一步："
-echo "  1) 编辑 $DEST/.env：填 DEEPSEEK_API_KEY；DSH_HOST 留空；端口被占改 GATEWAY_PORT / DSH_PORT"
+echo "  1) 编辑 $DEST/.env：填 DEEPSEEK_API_KEY；DSH_HOST 留空（自动探测）"
 echo "  2) cd $DEST && docker compose up -d --build"
 echo "  3) docker compose exec -T aicode cat /data/pair-code   # 拿配对码（一次性）"
 echo

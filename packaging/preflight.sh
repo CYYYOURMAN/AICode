@@ -5,8 +5,15 @@
 # 输出每项 [OK] / [WARN] / [FAIL]；有 FAIL 时退出码 1（先修好再部署）。
 # 端口按环境变量检查：GATEWAY_PORT（默认 3300）、DSH_PORT（默认 3080）。
 set -u
+# 读脚本所在目录的 .env（改过端口的部署也能正确体检）；环境变量优先
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)
+ENV_FILE="$SCRIPT_DIR/.env"
+env_get() { [ -f "$ENV_FILE" ] && grep -E "^$1=" "$ENV_FILE" 2>/dev/null | head -1 | cut -d= -f2-; }
+GATEWAY_PORT="${GATEWAY_PORT:-$(env_get GATEWAY_PORT)}"
 GATEWAY_PORT="${GATEWAY_PORT:-3300}"
+DSH_PORT="${DSH_PORT:-$(env_get DSH_PORT)}"
 DSH_PORT="${DSH_PORT:-3080}"
+AICODE_DIR="${AICODE_DIR:-$SCRIPT_DIR}"
 fail=0
 warn=0
 ok() { printf '  [OK]   %s\n' "$*"; }
@@ -59,13 +66,13 @@ else wa "访问 npm 源失败（离线/被墙）；可先配置代理，或构�
 
 # 5. 目录
 if mkdir -p "${AICODE_DIR:-$HOME/aicode}" 2>/dev/null && [ -w "${AICODE_DIR:-$HOME/aicode}" ]; then
-  ok "部署目录可写（${AICODE_DIR:-$HOME/aicode}）"
+  ok "部署目录可写（$AICODE_DIR）"
 else
-  fa "部署目录不可写（${AICODE_DIR:-$HOME/aicode}）"
+  fa "部署目录不可写（$AICODE_DIR）"
 fi
 
 # 6. 模型 key（如果已经有 .env）
-envf="${AICODE_DIR:-$HOME/aicode}/.env"
+envf="$AICODE_DIR/.env"
 if [ -f "$envf" ]; then
   key=$(grep -E '^DEEPSEEK_API_KEY=' "$envf" 2>/dev/null | head -1 | cut -d= -f2-)
   if [ -z "$key" ] || [ "$key" = "sk-xxxxxxxx" ]; then wa ".env 里 DEEPSEEK_API_KEY 还没填"
