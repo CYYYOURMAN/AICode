@@ -4,7 +4,7 @@ __pycache__/
 
 # 运行时数据（不进仓库）
 .env
-data/
+/data/
 *.log
 
 # Android
