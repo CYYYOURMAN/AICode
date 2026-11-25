@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AIcode · 让 AI 帮你部署自己的 AI 助手</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #0f0f11; color: #e8e8ea; font: 16px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 40px 20px 60px; }
+  h1 { font-size: 28px; margin: 0 0 8px; }
+  .sub { color: #9a9aa3; margin: 0 0 28px; }
+  .card { background: #17171b; border: 1px solid #26262c; border-radius: 14px; padding: 20px; margin: 16px 0; }
+  .step { display: flex; gap: 12px; margin: 12px 0; }
+  .n { flex: 0 0 26px; height: 26px; border-radius: 50%; background: #2a2a33; color: #c9c9d1; font-size: 14px; display: flex; align-items: center; justify-content: center; }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; }
+  pre { background: #0b0b0d; border: 1px solid #26262c; border-radius: 10px; padding: 14px; overflow-x: auto; color: #b9e6b9; }
+  button { border: 0; border-radius: 10px; padding: 12px 18px; font-size: 15px; cursor: pointer; background: #5b6cff; color: #fff; }
+  button.ghost { background: #23232a; color: #d0d0d8; }
+  a { color: #8b9bff; }
+  .muted { color: #7c7c86; font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>AIcode</h1>
+  <p class="sub">让 AI 帮你在自己的服务器上，搭一个能操作手机的 AI 助手。</p>
+
+  <div class="card">
+    <b>它是什么</b>
+    <p class="muted">手机 App + 服务器上的 AI 引擎。数据全在你的服务器，AI 能帮你对话、读写文件、跑命令、操作手机。
+    本页面就是「让 AI 来部署」的入口——你不需要懂 Docker、端口、systemd。</p>
+  </div>
+
+  <div class="card">
+    <b>怎么开始</b>
+    <div class="step"><div class="n">1</div><div>你需要一台 Linux 服务器（NAS / 云主机都行，装好 Docker），和一个模型 API key。</div></div>
+    <div class="step"><div class="n">2</div><div>把下面这段发给你的 AI（Claude、ChatGPT、DSH 都行），让它按部署指南在服务器上装。</div></div>
+    <div class="step"><div class="n">3</div><div>AI 装好后会给你「服务器地址 + 配对码」，安装 App 输入它们即可。</div></div>
+    <div style="margin-top:14px">
+      <button onclick="copyPrompt()">复制给 AI 的提示词</button>
+      <button class="ghost" onclick="window.open('deploy-for-ai.md','_blank')">看部署指南</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <b>下载 App</b>
+    <p class="muted">安装包（Android 8.0+，开源版未签名，需要自行签名；需要现成签名版请用主人提供的镜像）：</p>
+    <p><a href="https://github.com/CYYYOURMAN/AICode/releases">下载 AIcode APK</a></p>
+  </div>
+
+  <div class="card">
+    <b>给 AI 的部署指南</b>
+    <p class="muted">AI 会读这份文档照着装：<a href="deploy-for-ai.md">deploy-for-ai.md</a>（也可直接 curl）。</p>
+    <p class="muted">安装脚本：<a href="install.sh">install.sh</a> · 部署包：<a href="aicode-deploy.tar.gz">aicode-deploy.tar.gz</a></p>
+  </div>
+
+  <p class="muted">AIcode · 自托管 AI 工作台 · <a href="https://github.com/CYYYOURMAN/AICode">GitHub</a></p>
+</div>
+<script>
+function copyPrompt() {
+  var text = '请帮我在服务器上部署 AIcode（自托管 AI 助手）。' +
+    '按这份文档操作：' + location.href.replace(/[^/]*$/, '') + 'deploy-for-ai.md 。' +
+    '服务器有 Docker。部署完成后告诉我「服务器地址」和「配对码」。' +
+    '如果需要模型 API key，我会提供。';
+  navigator.clipboard.writeText(text).then(function(){
+    alert('已复制，发给你的 AI 即可。');
+  }).catch(function(){
+    prompt('复制这段发给你的 AI：', text);
+  });
+}
+</script>
+</body>
+</html>
