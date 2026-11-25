@@ -7,56 +7,69 @@
 
 ## 0. 前置检查
 - 确认是 Linux（NAS 的 Linux 或云主机都行），`uname -a` 能跑；
-- 确认有 Docker 和 docker compose v2：
-  - `docker --version`、`docker compose version`；
-  - 没有就先装：Debian/Ubuntu `apt install docker.io docker-compose-v2`；
+- 确认有 Docker 和 docker compose v2：`docker --version`、`docker compose version`；
+  没有就先装（Debian/Ubuntu）：`apt install docker.io docker-compose-v2`；
+  当前用户要能用 docker：`docker info` 报权限错误时，`sudo usermod -aG docker $USER` 后重新登录；
 - 确认 3300（网关）和 3080（引擎）端口没被占用：`ss -tlnp | grep -E ':3300|:3080'`；
-  被占用就记下，后面在 `.env` 里改 `GATEWAY_PORT` / `DSH_PORT`；
+  被占用就记下，后面在 `.env` 里改 `GATEWAY_PORT` / `DSH_PORT`（两个都要改，且不能相同）；
+- 记下这台服务器的**局域网 IP**（`hostname -I` 的第一个地址，例如 `192.168.1.10`）——手机要连它；
 - 向主人要一个模型 API key（DeepSeek 官方 key，`sk-` 开头）。
 
 ## 1. 下载部署包
 ```bash
-SITE="https://CYYYOURMAN.github.io/AICode"   # 下载失败时，改用主人提供的镜像地址
-mkdir -p ~/aicode && cd ~/aicode
+SITE="https://cyyyourman.github.io/AICode"
+DEST="${AICODE_DIR:-$HOME/aicode}"
+mkdir -p "$DEST" && cd "$DEST"
 curl -fsSL "$SITE/aicode-deploy.tar.gz" -o /tmp/aicode-deploy.tar.gz
-tar xzf /tmp/aicode-deploy.tar.gz -C ~/aicode
-ls   # 应看到 docker-compose.yml、.env.example、gateway/
-解压后先跑一次体检（只读，不改任何东西）：
-
-```bash
-cd ~/aicode && bash preflight.sh
+tar xzf /tmp/aicode-deploy.tar.gz -C "$DEST"
+ls   # 应看到 docker-compose.yml、.env.example、gateway/、preflight.sh
 ```
 
-每项 `[OK]` 或 `[WARN]` 才继续；出现 `[FAIL]` 先按提示修（端口被占用就改 `.env` 的 `GATEWAY_PORT`/`DSH_PORT`；Docker 权限问题按提示把用户加入 docker 组）。
-
-```
-或者直接跑一键脚本（会做同样的事）：
+也可以跑一键脚本（只做下载、解压、体检，**不会**替你填 key，也**不会**自动启动）：
 ```bash
 curl -fsSL "$SITE/install.sh" | AICODE_SITE="$SITE" bash
 ```
 
+已有别的服务占用 3300/3080、或者想多开一份时，用独立目录和端口隔离：
+`AICODE_DIR=$HOME/aicode-test GATEWAY_PORT=13300 DSH_PORT=13080`。
+
+解压后先跑一次体检（只读，不改任何东西）：
+```bash
+cd "$DEST" && bash preflight.sh
+```
+
+每项 `[OK]` 或 `[WARN]` 才继续；出现 `[FAIL]` 先按提示修（端口被占用就改 `.env` 的 `GATEWAY_PORT`/`DSH_PORT`；Docker 权限问题按提示把用户加入 docker 组）。
+
 ## 2. 配置
 ```bash
-cd ~/aicode
+cd "$DEST"
 cp .env.example .env
 ```
 编辑 `.env`：
 - `DEEPSEEK_API_KEY=` 填主人给的 key；
 - 端口被占用时改 `GATEWAY_PORT`（默认 3300）和 `DSH_PORT`（默认 3080）；
+- `DSH_HOST=` **留空**（启动时会自动探测服务器对外 IP）；不要填 `127.0.0.1`，否则手机连不上引擎；
+  自动探测不对时，填服务器局域网 IP（例如 `192.168.1.10`）；
 - 其余保持默认。
 
 ## 3. 启动
 ```bash
-cd ~/aicode
+cd "$DEST"
 docker compose up -d --build
 ```
-第一次会构建镜像（下载 DSH 引擎，几分钟）。构建失败时看日志：`docker compose build 2>&1 | tail -30`。
+第一次会构建镜像（下载 DSH 引擎，约 3–8 分钟）。构建失败时看日志：`docker compose build 2>&1 | tail -30`。
 
 ## 4. 等待就绪 + 拿配对码
 ```bash
-docker compose logs -f aicode   # 看到「配对码：XXXXXX」和「AIcode Gateway 监听 0.0.0.0:3300」即就绪
-docker compose exec aicode cat /data/pair-code   # 配对码（6 位数字）
+docker compose logs --tail=50 aicode
 ```
+**不要加 `-f`**（会一直挂着）。看到「配对码：XXXXXX」和「监听 0.0.0.0:3300」即就绪（端口随 `.env` 变）。
+
+```bash
+docker compose exec -T aicode cat /data/pair-code   # 配对码（6 位数字）
+```
+注意：**配对码是一次性的**，在 App 里配对成功后会自动轮换；再看时用上面的命令重新取。
+网关的共享密钥在容器内 `/data/secret`（配对码就是用它生成的）。
 
 ## 5. 验证（必须做）
 ```bash
@@ -64,24 +77,40 @@ docker compose exec aicode cat /data/pair-code   # 配对码（6 位数字）
 curl -s http://127.0.0.1:3300/health
 
 # 配对码能换密钥（应返回 {"ok":true,"secret":"..."}）
-curl -s -X POST http://127.0.0.1:3300/pair/claim -d '{"code":"<上一步的配对码>"}'
+CODE=$(docker compose exec -T aicode cat /data/pair-code | tr -d '[:space:]')
+SECRET=$(curl -s -X POST http://127.0.0.1:3300/pair/claim -d "{\"code\":\"$CODE\"}" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("secret",""))')
+
+# 带密钥调一个需要鉴权的接口，应返回 200；不带密钥应 401
+curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Bearer $SECRET" http://127.0.0.1:3300/app/version
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3300/app/version
+
+# 引擎端口应该监听在服务器局域网 IP 上（不是 127.0.0.1），手机才连得上
+ss -tlnp | grep ':3080'
 ```
-如果 `/health` 的 `ok` 是 false：看 `docker compose logs --tail=100 aicode`，常见是 DSH 还没打印 token（再等 30 秒）或端口冲突（改 `.env` 端口后 `docker compose up -d`）。
+
+- `/health` 的 `ok` 是 false：看 `docker compose logs --tail=100 aicode`，常见是 DSH 还没打印 token（再等 30 秒）或端口冲突（改 `.env` 端口后 `docker compose up -d`）。
+- `/app/version` 返回 200 但 `versionCode` 是 0：正常，这个部署没配置 App 发布通道（主人想要 App 更新功能时再配）。
 
 ## 6. 交付给主人
-告诉主人这两样（地址用服务器**局域网 IP**，例如 `http://192.168.1.10:3300`；如果主人在外网用，用 Tailscale IP 或公网安全部署）：
-1. 服务器地址：`http://<服务器IP>:<GATEWAY_PORT>`
+告诉主人这三样：
+1. 服务器地址：`http://<服务器局域网 IP>:3300`
 2. 配对码：`<6 位数字>`
+3. App 下载：
+   - GitHub Releases：https://github.com/CYYYOURMAN/AICode/releases
+     （Release 里的 APK 未签名，面向开发者：需要自己签名或用 Android Studio 安装；
+     普通用户请用主人提供的已签名 APK 下载地址）
 
-主人在手机 App「连接服务器」页填这两样即可。
+手机和服务器要在同一网络（同一局域网，或者都连上 Tailscale）。
+App 连的是**网关端口**（3300）；引擎端口（3080）必须监听服务器局域网 IP（上面的 `ss` 检查），否则 App 能配对但打不开页面。
 
 ## 7. 失败回滚
 ```bash
-cd ~/aicode && docker compose down -v
+cd "$DEST" && docker compose down -v
 ```
-如果装错了目录，删掉 `~/aicode` 重来。不要动服务器上其他服务。
+**注意 `-v` 会删数据卷**（配对密钥、DSH 的数据）；只是重装/重启时**不要**加 `-v`，否则要重新配对、重建数据。
+如果装错了目录，删掉 `$DEST` 重来。不要动服务器上其他服务。
 
 ## 注意
 - 不要改 `gateway/` 里的代码；更新时重新下载部署包并 `docker compose up -d --build`；
 - 不要把 `.env`、配对码、密钥写到公开的地方；
-- 端口只对内网开放即可；要公网访问，先让主人确认，再走 HTTPS 反向代理（见部署包里的 README）。
+- 端口只对内网开放即可；要公网访问，先让主人确认，再走 HTTPS 反向代理（见仓库 `docs/HTTPS.md`）。

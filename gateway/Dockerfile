@@ -1,4 +1,4 @@
-FROM node:22-slim
+FROM node:24-slim
 
 # 国内网络默认走镜像源；海外构建可覆盖：--build-arg APT_MIRROR=deb.debian.org --build-arg NPM_REGISTRY=https://registry.npmjs.org
 ARG DSH_VERSION=0.2.2-rc.5

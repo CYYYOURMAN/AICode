@@ -17,7 +17,8 @@ services:
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       GATEWAY_PORT: ${GATEWAY_PORT:-3300}
       DSH_PORT: ${DSH_PORT:-3080}
-      DSH_HOST: ${DSH_HOST:-127.0.0.1}
+      # 留空则容器内自动探测服务器对外 IP（entrypoint 里处理）
+      DSH_HOST: ${DSH_HOST:-}
       GATEWAY_SECRET: ${GATEWAY_SECRET:-}
       PHONE_ENABLED: ${PHONE_ENABLED:-1}
       EXEC_ENABLED: ${EXEC_ENABLED:-0}

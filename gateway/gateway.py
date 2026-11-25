@@ -243,7 +243,7 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:
                 pass
             self._json({"ok": ok_port, "port": ok_port, "phone": PHONE_ENABLED,
-                        "time": time.strftime("%Y-%m-%d %H:%M:%S")})
+                        "time": time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(time.time() + 8 * 3600))})
             return
         if not self._authed():
             # /go 允许用 ?k= 换取跳转（浏览器场景）
