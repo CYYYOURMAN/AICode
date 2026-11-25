@@ -1,7 +1,5 @@
 # AIcode
 
-[![build-apk](https://github.com/CYYYOURMAN/AICode/actions/workflows/build-apk.yml/badge.svg)](https://github.com/CYYYOURMAN/AICode/actions/workflows/build-apk.yml)
-
 **把一台自己的 Linux 服务器变成「AI 手机助手」。**
 手机 App 连上你自己托管的 [DSH](https://github.com/deepseek-ai/deepseek-harness) 引擎：
 能对话、读写文件、跑命令、操作手机——数据和服务全在你自己手里。
