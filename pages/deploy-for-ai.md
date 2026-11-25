@@ -78,7 +78,7 @@ DSH_PORT=$(grep -E '^DSH_PORT=' .env | cut -d= -f2); DSH_PORT=${DSH_PORT:-3080}
 看到「配对码：XXXXXX」和「监听 0.0.0.0:$GATEWAY_PORT」即就绪（端口按 `.env` 变）。
 
 ```bash
-docker compose exec -T aicode cat /data/pair-code   # 配对码（6 位数字）
+docker compose exec -T aicode cat /data/pair-code; echo   # 配对码（6 位数字；加 echo 是因为文件没有结尾换行）
 ```
 注意：**配对码是一次性的**，在 App 里配对成功后会自动轮换；再看时用上面的命令重新取。
 网关的共享密钥在容器内 `/data/secret`（配对码就是用它生成的）。
@@ -93,10 +93,10 @@ docker compose exec -T aicode cat /data/pair-code   # 配对码（6 位数字）
 GATEWAY_PORT=$(grep -E '^GATEWAY_PORT=' .env | cut -d= -f2); GATEWAY_PORT=${GATEWAY_PORT:-3300}
 DSH_PORT=$(grep -E '^DSH_PORT=' .env | cut -d= -f2); DSH_PORT=${DSH_PORT:-3080}
 
-# 健康检查，应返回 {"ok":true,"port":true,...}（刚启动 15 秒内可能 ok:false，等一会儿重试）
+# 健康检查，应返回 {"ok": true, "port": true, ...}（刚启动 15 秒内可能 ok: false，等一会儿重试）
 curl -s http://127.0.0.1:$GATEWAY_PORT/health
 
-# 配对码能换密钥（应返回 {"ok":true,"secret":"..."}）
+# 配对码能换密钥（应返回 {"ok": true, "secret": "..."}）
 CODE=$(docker compose exec -T aicode cat /data/pair-code | tr -d '[:space:]')
 SECRET=$(curl -s -X POST http://127.0.0.1:$GATEWAY_PORT/pair/claim -d "{\"code\":\"$CODE\"}" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("secret",""))')
 
@@ -114,7 +114,7 @@ ss -tlnp | grep ":$DSH_PORT"
 **注意：上面的验证每 claim 一次，配对码就轮换一次。交付给主人前必须重新取：**
 
 ```bash
-cd "$DEST" && docker compose exec -T aicode cat /data/pair-code
+cd "$DEST" && { docker compose exec -T aicode cat /data/pair-code; echo; }
 ```
 
 ### 5.1 验证 AI 真的能用（有真实 key 时）
@@ -139,7 +139,7 @@ docker compose exec -T aicode node -e "fetch('https://api.deepseek.com/models',{
 http://<服务器局域网 IP>:$GATEWAY_PORT/health
 ```
 
-看到 `{"ok":true,...}` 才说明手机能到网关；看不到是网络/防火墙问题，不是 App 的问题。
+看到 `{"ok": true, ...}` 才说明手机能到网关；看不到是网络/防火墙问题，不是 App 的问题。
 再确认引擎端口监听在手机能访问的地址上：`ss -tlnp | grep ":$DSH_PORT"` 应显示局域网 IP（不是 `127.0.0.1`）。
 
 ## 6. 交付给主人

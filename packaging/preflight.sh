@@ -75,15 +75,43 @@ else
   fa "部署目录不可写（$AICODE_DIR）"
 fi
 
-# 6. 模型 key（如果已经有 .env）
+# 6. 模型 key（如果已经有 .env）：格式 + 真连一次
+# 为什么"真连"：没有这一步，假 key / 错 key 时 /health、配对、/app/version 全绿，
+# 但 App 一说话就 401——「全绿但对话必失败」是最坑的一种假成功。
 envf="$AICODE_DIR/.env"
 if [ -f "$envf" ]; then
-  key=$(grep -E '^DEEPSEEK_API_KEY=' "$envf" 2>/dev/null | head -1 | cut -d= -f2-)
-  if [ -z "$key" ] || [ "$key" = "sk-xxxxxxxx" ]; then wa ".env 里 DEEPSEEK_API_KEY 还没填"
-  elif printf '%s' "$key" | grep -qE '^sk-[A-Za-z0-9]{16,}$'; then ok ".env 里的 key 格式正常"
-  else wa ".env 里的 key 格式不像 DeepSeek key（sk- 开头），确认没复制错"; fi
+  key=$(grep -E '^DEEPSEEK_API_KEY=' "$envf" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '[:space:]')
+  if [ -z "$key" ] || [ "$key" = "sk-xxxxxxxx" ]; then
+    wa ".env 里 DEEPSEEK_API_KEY 还没填（服务能启动，但对话必失败）"
+  else
+    if ! printf '%s' "$key" | grep -qE '^sk-[A-Za-z0-9]+$'; then
+      wa "DEEPSEEK_API_KEY 里有空格/连字符等异常字符（正常是 sk- 加 32 位字母数字），仍会实测一次"
+    fi
+    code=$(curl -s -o /dev/null -w '%{http_code}' -m 10 \
+      -H "Authorization: Bearer $key" https://api.deepseek.com/models 2>/dev/null || true)
+    [ -n "${code:-}" ] || code=000
+    case "$code" in
+      200) ok "模型 key 实测可用（api.deepseek.com 200）" ;;
+      401|403) fa "模型 key 无效（api.deepseek.com $code）：服务能启动、/health 也会绿，但 App 里对话必失败——换真 key 再来" ;;
+      000) wa "连不上 api.deepseek.com（出网/DNS/代理？），验证不了 key；部署后必须确认 5.1 能返回 model api: 200" ;;
+      *) wa "模型 key 校验返回 HTTP $code；部署后必须确认 5.1 能返回 model api: 200" ;;
+    esac
+  fi
 else
   wa "还没有 .env（部署时 cp .env.example .env 再填 key）"
+fi
+
+# 7. 防火墙（手机连不进来时第一嫌疑）
+if command -v ufw >/dev/null 2>&1; then
+  st=$(ufw status 2>/dev/null | head -1)
+  case "$st" in
+    *active*) wa "ufw 已启用：手机要连进来需放行端口——sudo ufw allow $GATEWAY_PORT/tcp; sudo ufw allow $DSH_PORT/tcp" ;;
+    *) wa "检测到 ufw（读不到状态一般要 sudo）：确认 $GATEWAY_PORT/$DSH_PORT 已放行，否则手机连不上" ;;
+  esac
+elif command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state 2>/dev/null | grep -q running; then
+  wa "firewalld 在运行：放行端口——sudo firewall-cmd --add-port=$GATEWAY_PORT/tcp --add-port=$DSH_PORT/tcp"
+else
+  ok "没有检测到 ufw/firewalld 拦截"
 fi
 
 echo
