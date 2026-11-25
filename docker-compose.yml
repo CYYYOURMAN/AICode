@@ -1,0 +1,29 @@
+# AIcode —— 自托管 DSH 移动端网关
+#
+#   cp .env.example .env   # 填 DEEPSEEK_API_KEY
+#   docker compose up -d --build
+#
+# 使用 host 网络：DSH 的 --host 只接受具体 IP，容器动态 IP 不可靠；
+# Linux 服务器上 host 网络最简单（macOS/Windows 不支持 host 网络，请用 Linux）。
+services:
+  aicode:
+    build: ./gateway
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:?请在 .env 里设置 DEEPSEEK_API_KEY}
+      GATEWAY_PORT: ${GATEWAY_PORT:-3300}
+      DSH_PORT: ${DSH_PORT:-3080}
+      DSH_HOST: ${DSH_HOST:-127.0.0.1}
+      GATEWAY_SECRET: ${GATEWAY_SECRET:-}
+      PHONE_ENABLED: ${PHONE_ENABLED:-1}
+      EXEC_ENABLED: ${EXEC_ENABLED:-0}
+      # App 下发的引擎地址：套 HTTPS 反代后改成 https://你的域名
+      DSH_BASE: ${DSH_BASE:-}
+    volumes:
+      - aicode_dsh_home:/root/.dsh
+      - aicode_data:/data
+
+volumes:
+  aicode_dsh_home:
+  aicode_data:
