@@ -6,6 +6,10 @@ on:
     tags:
       - "v*"
 
+permissions:
+  contents: write
+  issues: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -24,12 +28,6 @@ jobs:
         with:
           gradle-version: "8.9"
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install platform 35
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
-
       - name: Build release APK
         working-directory: android
         run: gradle assembleRelease --no-daemon --console=plain 2>&1 | tee /tmp/build.log
@@ -41,6 +39,14 @@ jobs:
           name: build-log
           path: /tmp/build.log
           if-no-files-found: ignore
+
+      - name: Report failure as issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tail -c 6000 /tmp/build.log > /tmp/err.txt || true
+          gh issue create --title "CI build failed (${{ github.ref_name }})" --body-file /tmp/err.txt || true
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
