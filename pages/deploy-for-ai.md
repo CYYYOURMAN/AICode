@@ -36,8 +36,9 @@ curl -fsSL "$SITE/install.sh" | AICODE_SITE="$SITE" AICODE_DIR="$HOME/aicode-tes
 ```
 手动部署时，直接在 `$DEST/.env` 里改 `GATEWAY_PORT` / `DSH_PORT`（两个都改）。
 
-解压后先跑一次体检（只读，不改任何东西）：
+先建好 `.env` 再跑体检（体检要读 `.env` 才知道最终端口；没有 `.env` 时端口检查会跳过）：
 ```bash
+cd "$DEST" && ( [ -f .env ] || cp .env.example .env )
 cd "$DEST" && bash preflight.sh
 ```
 
@@ -61,7 +62,7 @@ cp .env.example .env
 cd "$DEST"
 docker compose up -d --build
 ```
-第一次会构建镜像（下载 DSH 引擎，约 3–8 分钟）。构建失败时看日志：`docker compose build 2>&1 | tail -30`。
+第一次会构建镜像（下载 DSH 引擎，看网络约 5–15 分钟；几分钟没动静是正常的，别 Ctrl-C）。构建失败时看日志：`docker compose build 2>&1 | tail -30`，磁盘至少留 3GB：`df -h`。
 
 ## 4. 等待就绪 + 拿配对码
 ```bash
@@ -83,7 +84,6 @@ docker compose exec -T aicode cat /data/pair-code   # 配对码（6 位数字）
 网关的共享密钥在容器内 `/data/secret`（配对码就是用它生成的）。
 
 ## 5. 验证（必须做）
-```bash
 ```bash
 # 端口从 .env 读（换过端口也不会验错实例）
 GATEWAY_PORT=$(grep -E '^GATEWAY_PORT=' .env | cut -d= -f2); GATEWAY_PORT=${GATEWAY_PORT:-3300}
@@ -107,7 +107,42 @@ ss -tlnp | grep ":$DSH_PORT"
 - `/health` 的 `ok` 是 false：看 `docker compose logs --tail=100 aicode`，常见是 DSH 还没打印 token（再等 30 秒）或端口冲突（改 `.env` 端口后 `docker compose up -d`）。
 - `/app/version` 返回 200 但 `versionCode` 是 0：正常，这个部署没配置 App 发布通道（主人想要 App 更新功能时再配）。
 
+**注意：上面的验证每 claim 一次，配对码就轮换一次。交付给主人前必须重新取：**
+
+```bash
+cd "$DEST" && docker compose exec -T aicode cat /data/pair-code
+```
+
+### 5.1 验证 AI 真的能用（有真实 key 时）
+
+上面验的是网关和端口，**不能证明模型可用**。用真实 key 时补这一步：
+
+```bash
+docker compose exec -T aicode node -e "fetch('https://api.deepseek.com/models',{headers:{Authorization:'Bearer '+process.env.DEEPSEEK_API_KEY}}).then(r=>console.log('model api:',r.status)).catch(e=>console.log('model api: ERR',e.message))"
+```
+
+- 返回 `model api: 200` 才算真的能用（再在 App 里发一句确认）；
+- `401` / `403`：key 错了，改 `.env` 后 `docker compose up -d`（会重建容器）；
+- `ERR`：容器出不了网；
+- 启动日志出现「连不上 api.deepseek.com（HTTP 000）」：也是出网问题（被拦 / DNS / 容器缺 CA）；
+- **用假 key / 没填 key 时**：`/health` 绿、配对成功、`/app/version` 200 都正常，但一问模型就失败——**不算部署成功**。
+
+### 5.2 从手机那一端验（客户端侧）
+
+手机和服务器连同一网络后，**用手机浏览器**打开：
+
+```
+http://<服务器局域网 IP>:$GATEWAY_PORT/health
+```
+
+看到 `{"ok":true,...}` 才说明手机能到网关；看不到是网络/防火墙问题，不是 App 的问题。
+再确认引擎端口监听在手机能访问的地址上：`ss -tlnp | grep ":$DSH_PORT"` 应显示局域网 IP（不是 `127.0.0.1`）。
+
 ## 6. 交付给主人
+
+> 配对码是**一次性**的：第 5 节验证时已经用掉一个了。交付前务必按 5 节末尾的命令**重新取一次**，
+> 且取完之后不要再拿它去 claim 或配对（否则这个码又在主人手里失效）。
+
 告诉主人这三样：
 1. 服务器地址：`http://<服务器局域网 IP>:$GATEWAY_PORT`（手机走 Tailscale 时换成 Tailscale IP）
 2. 配对码：`<6 位数字>`

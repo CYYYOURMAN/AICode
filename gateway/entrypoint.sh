@@ -75,7 +75,7 @@ if [ -n "${DEEPSEEK_API_KEY:-}" ]; then
   case "$key_code" in
     200) echo "[entrypoint] 模型 key 验证通过" ;;
     401|403) echo "[entrypoint] 警告：模型 key 无效（HTTP $key_code）——服务能启动，但对话会失败；检查 .env 的 DEEPSEEK_API_KEY" >&2 ;;
-    000) echo "[entrypoint] 提示：连不上 api.deepseek.com，跳过模型 key 验证（不影响启动）" ;;
+    000) echo "[entrypoint] 警告：连不上 api.deepseek.com（HTTP 000——服务器出不了网、DNS 失败，或容器缺 CA 证书），跳过模型 key 验证" >&2 ;;
     *) echo "[entrypoint] 提示：模型 key 验证返回 HTTP $key_code（不影响启动）" ;;
   esac
 fi

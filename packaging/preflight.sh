@@ -50,14 +50,18 @@ else
   fa "没有 Docker（Debian/Ubuntu：apt install docker.io docker-compose-v2）"
 fi
 
-# 3. 端口
-busy=""
-for p in "$GATEWAY_PORT" "$DSH_PORT"; do
-  if ss -ltn 2>/dev/null | awk '{print $4}' | grep -qE "[:.]$p$"; then busy="$busy $p"; fi
-done
-if [ -z "$busy" ]; then ok "端口 $GATEWAY_PORT / $DSH_PORT 空闲"
-else fa "端口被占用：$busy（在 .env 里改 GATEWAY_PORT / DSH_PORT）"; fi
-if [ "$GATEWAY_PORT" = "$DSH_PORT" ]; then fa "GATEWAY_PORT 和 DSH_PORT 不能相同"; fi
+# 3. 端口（还没有 .env 时无法知道最终端口，按默认端口报 FAIL 会误导，改跳过）
+if [ ! -f "$ENV_FILE" ]; then
+  wa "还没有 .env，跳过端口检查（先 cp .env.example .env；改过端口的话从现在起以 .env 为准）"
+else
+  busy=""
+  for p in "$GATEWAY_PORT" "$DSH_PORT"; do
+    if ss -ltn 2>/dev/null | awk '{print $4}' | grep -qE "[:.]$p$"; then busy="$busy $p"; fi
+  done
+  if [ -z "$busy" ]; then ok "端口 $GATEWAY_PORT / $DSH_PORT 空闲"
+  else fa "端口被占用：$busy（在 .env 里改 GATEWAY_PORT / DSH_PORT）"; fi
+  if [ "$GATEWAY_PORT" = "$DSH_PORT" ]; then fa "GATEWAY_PORT 和 DSH_PORT 不能相同"; fi
+fi
 
 # 4. 网络（构镜像要下载 DSH 包）
 if curl -fsS -m 8 -o /dev/null https://registry.npmmirror.com 2>/dev/null; then ok "能访问 npm 镜像源"
