@@ -50,6 +50,13 @@ docker compose exec aicode cat /data/secret       # 共享密钥（不想配对�
 - 引擎：`http://你的服务器IP:3080`
 - 健康检查：`curl http://你的服务器IP:3300/health`
 
+## App 预览
+
+<p>
+<img src="docs/screenshots/mcp-config.png" width="340" alt="MCP 配置">
+<img src="docs/screenshots/bottom-nav.png" width="340" alt="底部导航">
+</p>
+
 ## 连接手机（配对）
 
 1. 装 App：从 [Releases](https://github.com/CYYYOURMAN/AICode/releases) 下载 APK，或自己构建（见下）；
