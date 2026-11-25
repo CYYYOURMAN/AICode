@@ -24,9 +24,11 @@ jobs:
         with:
           gradle-version: "8.9"
 
-      - name: Install Android platform 35 (if missing)
-        run: |
-          sdkmanager --list_installed 2>/dev/null | grep -q "platforms;android-35" || sdkmanager "platforms;android-35" "build-tools;35.0.0" >/dev/null
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install platform 35
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
       - name: Build release APK
         working-directory: android
