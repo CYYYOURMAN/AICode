@@ -18,5 +18,8 @@ android/.idea/
 *.iml
 *.apk
 
+# 公开下载的签名 APK（Pages 提供直接下载）
+!pages/app/*.apk
+
 # OS
 .DS_Store

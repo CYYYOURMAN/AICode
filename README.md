@@ -23,6 +23,11 @@
                                              └──────────────────────────────┘
 ```
 
+## 下载 APK（已签名，可直接安装）
+
+- App：https://cyyyourman.github.io/AICode/app/aicode-latest.apk
+- 部署指南（发给自己的 AI 照做）：https://cyyyourman.github.io/AICode/deploy-for-ai.md
+
 ## 前置条件
 
 - 一台 Linux 服务器（NAS / VPS / 小主机都行），装好 Docker 和 Docker Compose；
