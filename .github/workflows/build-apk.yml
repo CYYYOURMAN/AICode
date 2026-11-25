@@ -110,8 +110,16 @@ jobs:
           name: aicode-apk
           path: dist
 
+      - name: Show artifact tree
+        run: ls -R dist
+
+      - name: Move APKs to workspace root
+        run: |
+          find dist -name "*.apk" -exec mv {} . \;
+          ls -la ./*.apk
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*.apk
+          files: "*.apk"
           generate_release_notes: true
