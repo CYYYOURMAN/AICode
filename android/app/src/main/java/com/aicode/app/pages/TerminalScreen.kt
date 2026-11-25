@@ -33,6 +33,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -72,7 +73,7 @@ private class TermTab {
 }
 
 @Composable
-fun TerminalScreen() {
+fun TerminalScreen(onOpenWeb: () -> Unit = {}) {
     val ctx = LocalContext.current
     val prefs = remember { ctx.getSharedPreferences("aicode-terminal", Context.MODE_PRIVATE) }
     val savedHistory = remember {
@@ -128,6 +129,20 @@ fun TerminalScreen() {
             }) {
                 Icon(Icons.Filled.Add, contentDescription = "新建标签")
             }
+        }
+
+        // 真正的交互式终端在 DSH 网页版里（xterm.js）；这里只是单条命令的快捷输入
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "交互式终端在网页版：新建会话 →「新建终端」（支持 bash / vim）",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = onOpenWeb) { Text("去网页版") }
         }
 
         Row(

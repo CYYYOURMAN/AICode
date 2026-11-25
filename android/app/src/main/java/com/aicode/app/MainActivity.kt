@@ -681,7 +681,7 @@ private fun AppShell(
                             error = webError,
                             onRetry = { reconnectTries = 0; webRetryKey++ },
                         )
-                        "terminal" -> TerminalScreen()
+                        "terminal" -> TerminalScreen(onOpenWeb = { page = "web" })
                         "files" -> FilesScreen(client = client, cookie = cookie)
                         "settings" -> SettingsScreen(
                             endpoint = endpoint,
