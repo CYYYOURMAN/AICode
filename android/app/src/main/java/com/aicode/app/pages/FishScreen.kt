@@ -1040,6 +1040,18 @@ private fun TalkContent(client: com.aicode.app.data.EngineClient?, cookie: Strin
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
 
+    // 列表可视高度变小（=键盘弹起，含「收起后再弹起」）时滚到最新：
+    // 用 viewportSize 而不是焦点/insets，焦点没变化时也能触发
+    LaunchedEffect(listState) {
+        var lastHeight = 0
+        snapshotFlow { listState.layoutInfo.viewportSize.height }.collect { h ->
+            if (h > 0 && lastHeight > 0 && h < lastHeight) {
+                runCatching { listState.scrollToItem((lines.size - 1).coerceAtLeast(0)) }
+            }
+            if (h > 0) lastHeight = h
+        }
+    }
+
     // 消息数量变化（发出 / 收到回复）时滚到最新：按「布局后的 item 数」滚，
     // 避免 lines.size 领先于 LazyColumn 实际的 itemCount 时越界、被夹回旧位置（表现为前面的消息跳上来）
     LaunchedEffect(listState) {
@@ -1071,7 +1083,8 @@ private fun TalkContent(client: com.aicode.app.data.EngineClient?, cookie: Strin
         }
     }
 
-    Column(Modifier.fillMaxSize().imePadding()) {
+    // 键盘抬升交给 AppShell 的全局 imePadding；这里再套一层会在反复弹起/收起时叠加错位
+    Column(Modifier.fillMaxSize()) {
         if (lines.isEmpty()) {
             Column(
                 Modifier.weight(1f).fillMaxWidth().padding(horizontal = 32.dp),
