@@ -224,6 +224,27 @@ private fun ConnectForm(ctx: Context, onConnected: () -> Unit) {
                     ) {
                         Text(if (pairMode) "我只想输入密钥" else "改用配对码")
                     }
+                    TextButton(
+                        onClick = {
+                            val cm = ctx.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                                as? android.content.ClipboardManager
+                            val raw = cm?.primaryClip?.getItemAt(0)?.text?.toString()?.trim().orEmpty()
+                            if (raw.isEmpty()) {
+                                error = "剪贴板是空的"
+                            } else {
+                                val parts = raw.split("|")
+                                if (parts.size >= 2 && parts[0].trim().startsWith("http") && parts[1].trim().isNotEmpty()) {
+                                    ServerConfig.save(ctx, parts[0].trim(), parts[1].trim())
+                                    onConnected()
+                                } else {
+                                    error = "连接信息格式不对（应为 服务器地址|密钥）"
+                                }
+                            }
+                        },
+                        modifier = Modifier.align(Alignment.End),
+                    ) {
+                        Text("从剪贴板导入连接")
+                    }
                 }
                 Spacer(Modifier.height(14.dp))
                 Text(

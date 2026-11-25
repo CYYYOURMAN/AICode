@@ -389,6 +389,19 @@ fun SettingsScreen(
                     Spacer(Modifier.width(6.dp))
                     Text("重新配对")
                 }
+                TextButton(
+                    onClick = {
+                        val cm = ctx.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                            as? android.content.ClipboardManager
+                        val text = ServerConfig.base(ctx) + "|" + ServerConfig.secret(ctx)
+                        cm?.setPrimaryClip(android.content.ClipData.newPlainText("aicode-connect", text))
+                        android.widget.Toast.makeText(
+                            ctx, "已复制连接信息（含密钥，别发给别人）", android.widget.Toast.LENGTH_SHORT,
+                        ).show()
+                    },
+                ) {
+                    Text("复制连接信息")
+                }
             }
 
             Spacer(Modifier.height(18.dp))
