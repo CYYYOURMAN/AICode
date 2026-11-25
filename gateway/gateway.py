@@ -165,11 +165,19 @@ def latest_token() -> str:
 
 
 def app_base(handler) -> str:
+    """返回 App 应该连接的 DSH 引擎地址。
+
+    注意：这里返回的是 DSH（Web UI/API）的地址，不是网关自己的地址——
+    App 的本地回环转发会把请求转到这里。默认按请求 Host 的主机 + DSH 端口推断；
+    套了 HTTPS 反代时用 DSH_BASE 显式指定（如 https://aicode.example.com）。
+    """
     if DSH_BASE:
         return DSH_BASE
-    host = handler.headers.get("Host") or handler.server.server_address[0]
-    # 默认协议 http（开源版建议前面套 Caddy/Nginx 拿 HTTPS）
-    return "http://" + host
+    host = (handler.headers.get("Host") or "").split(":")[0].strip()
+    if not host:
+        host = str(handler.server.server_address[0])
+    dsh_port = os.environ.get("DSH_PORT", "3080")
+    return "http://" + host + ":" + dsh_port
 
 
 def rotate_crash_log():
