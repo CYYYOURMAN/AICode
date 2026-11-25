@@ -331,6 +331,13 @@ fun FilesScreen(client: EngineClient?, cookie: String?) {
 
     fun shellQuote(v: String): String = "'" + v.replace("'", "'\\''") + "'"
 
+    fun shellErr(out: String): String = when {
+        out.contains("exec disabled") -> "服务器未启用 exec（部署文档里设 EXEC_ENABLED=1）"
+        out.contains("No such file or directory") -> "路径不存在"
+        out.contains("Permission denied") -> "权限不足"
+        else -> out
+    }
+
     fun childPath(base: String, name: String): String = if (base.isBlank()) name else "$base/$name"
 
     fun runShellCmd(cmd: String): Pair<Int, String> = try {
@@ -372,7 +379,7 @@ fun FilesScreen(client: EngineClient?, cookie: String?) {
                             val (code, out) = withContext(Dispatchers.IO) {
                                 runShellCmd("mkdir -p " + shellQuote(childPath(currentDir, name)))
                             }
-                            notice = if (code == 0) "已新建文件夹 $name" else "新建失败：$out"
+                            notice = if (code == 0) "已新建文件夹 $name" else "新建失败：${shellErr(out)}"
                             refreshKey++
                         }
                     }
@@ -409,7 +416,7 @@ fun FilesScreen(client: EngineClient?, cookie: String?) {
                                         "mv " + shellQuote(childPath(currentDir, renamingEntry.name)) + " " + shellQuote(childPath(currentDir, name)),
                                 )
                             }
-                            notice = if (code == 0) "已重命名为 $name" else "重命名失败：$out"
+                            notice = if (code == 0) "已重命名为 $name" else "重命名失败：${shellErr(out)}"
                             refreshKey++
                         }
                     } else {
@@ -436,7 +443,7 @@ fun FilesScreen(client: EngineClient?, cookie: String?) {
                         val (code, out) = withContext(Dispatchers.IO) {
                             runShellCmd("rm -rf " + shellQuote(childPath(currentDir, deletingEntry.name)))
                         }
-                        notice = if (code == 0) "已删除 ${deletingEntry.name}" else "删除失败：$out"
+                        notice = if (code == 0) "已删除 ${deletingEntry.name}" else "删除失败：${shellErr(out)}"
                         refreshKey++
                     }
                 }) {

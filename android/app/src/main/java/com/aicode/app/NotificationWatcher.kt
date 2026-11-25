@@ -155,7 +155,7 @@ private fun notifyDone(ctx: Context, title: String, sessionId: String, durationM
     val durText = if (secs < 60) "${secs} 秒" else "${secs / 60} 分 ${secs % 60} 秒"
     val n = b.setContentTitle("回合完成：$title")
         .setContentText("用时 $durText · 点开直接到这个会话")
-        .setSmallIcon(android.R.drawable.stat_notify_chat)
+        .setSmallIcon(R.mipmap.ic_launcher)
         .setContentIntent(pi)
         .setAutoCancel(true)
         .build()

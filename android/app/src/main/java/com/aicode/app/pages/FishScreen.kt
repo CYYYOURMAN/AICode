@@ -56,6 +56,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -73,6 +74,7 @@ import com.aicode.app.ui.SectionTitle
 import com.aicode.app.ui.appCardColor
 import com.aicode.app.ui.appLineColor
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import okhttp3.MediaType.Companion.toMediaType
@@ -1127,7 +1129,15 @@ private fun TalkContent(client: com.aicode.app.data.EngineClient?, cookie: Strin
             OutlinedTextField(
                 value = input,
                 onValueChange = { input = it },
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).onFocusChanged { state ->
+                    // 键盘弹出后列表可视高度变小，不主动滚到底就会看不到最新消息
+                    if (state.isFocused) {
+                        scope.launch {
+                            delay(350)
+                            runCatching { listState.scrollToItem((lines.size - 1).coerceAtLeast(0)) }
+                        }
+                    }
+                },
                 placeholder = { Text("说点什么…", style = MaterialTheme.typography.bodySmall) },
                 textStyle = MaterialTheme.typography.bodyMedium,
                 maxLines = 4,

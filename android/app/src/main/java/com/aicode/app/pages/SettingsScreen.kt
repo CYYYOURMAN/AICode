@@ -132,10 +132,12 @@ fun SettingsScreen(
     }
     LaunchedEffect(Unit) {
         while (true) {
-            watchStatus = runCatching {
+            val raw = runCatching {
                 ctx.getSharedPreferences("aicode-watch", android.content.Context.MODE_PRIVATE)
                     .getString("status", "") ?: ""
             }.getOrDefault("").ifEmpty { "还没开始监听" }
+            // 通知状态只保留「上次通知 HH:MM:SS」这段，不显示会话标题（隐私/简洁）
+            watchStatus = if (raw.startsWith("上次通知")) raw.substringBefore("：") else raw
             kotlinx.coroutines.delay(3000)
         }
     }
@@ -340,6 +342,15 @@ fun SettingsScreen(
                     icon = painterResource(R.drawable.ic_tab_files),
                     title = "回合完成通知",
                     subtitle = watchStatus,
+                    onClick = {
+                        runCatching {
+                            ctx.startActivity(
+                                Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                    .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, ctx.packageName)
+                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                            )
+                        }
+                    },
                 )
             }
 

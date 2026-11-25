@@ -172,9 +172,7 @@ class MainActivity : ComponentActivity() {
                 if (prefs.getBoolean("dark", true)) 0xFF151517.toInt() else 0xFFFFFFFF.toInt(),
             ),
         )
-        if (Build.VERSION.SDK_INT >= 33) {
-            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
-        }
+        // POST_NOTIFICATIONS 不在这里弹窗：设置页「回合完成通知」点击进系统通知设置
         setContent {
             var dark by remember { mutableStateOf(prefs.getBoolean("dark", true)) }
             // 还没配置服务器（首次安装，或设置页点了「重新配对」）时先走连接向导；
