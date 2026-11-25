@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut android:shortcutId="web" android:enabled="true"
+        android:icon="@drawable/ic_tab_web"
+        android:shortcutShortLabel="@string/shortcut_web"
+        android:shortcutLongLabel="@string/shortcut_web_long">
+        <intent android:action="android.intent.action.MAIN" android:targetClass="com.aicode.app.MainActivity">
+            <extra android:name="tab" android:value="web" />
+        </intent>
+    </shortcut>
+    <shortcut android:shortcutId="terminal" android:enabled="true"
+        android:icon="@drawable/ic_tab_terminal"
+        android:shortcutShortLabel="@string/shortcut_terminal"
+        android:shortcutLongLabel="@string/shortcut_terminal_long">
+        <intent android:action="android.intent.action.MAIN" android:targetClass="com.aicode.app.MainActivity">
+            <extra android:name="tab" android:value="terminal" />
+        </intent>
+    </shortcut>
+    <shortcut android:shortcutId="files" android:enabled="true"
+        android:icon="@drawable/ic_tab_files"
+        android:shortcutShortLabel="@string/shortcut_files"
+        android:shortcutLongLabel="@string/shortcut_files_long">
+        <intent android:action="android.intent.action.MAIN" android:targetClass="com.aicode.app.MainActivity">
+            <extra android:name="tab" android:value="files" />
+        </intent>
+    </shortcut>
+    <shortcut android:shortcutId="settings" android:enabled="true"
+        android:icon="@drawable/ic_tab_settings"
+        android:shortcutShortLabel="@string/shortcut_settings"
+        android:shortcutLongLabel="@string/shortcut_settings_long">
+        <intent android:action="android.intent.action.MAIN" android:targetClass="com.aicode.app.MainActivity">
+            <extra android:name="tab" android:value="settings" />
+        </intent>
+    </shortcut>
+    <shortcut android:shortcutId="fish" android:enabled="true"
+        android:icon="@drawable/ic_tab_fish"
+        android:shortcutShortLabel="@string/shortcut_fish"
+        android:shortcutLongLabel="@string/shortcut_fish_long">
+        <intent android:action="android.intent.action.MAIN" android:targetClass="com.aicode.app.MainActivity">
+            <extra android:name="tab" android:value="fish" />
+        </intent>
+    </shortcut>
+</shortcuts>

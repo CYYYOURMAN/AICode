@@ -1,6 +1,22 @@
+# Python
 __pycache__/
 *.pyc
+
+# 运行时数据（不进仓库）
 .env
 data/
 *.log
+
+# Android
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/keystore.properties
+android/.kotlin/
+android/.idea/
+*.iml
+*.apk
+
+# OS
 .DS_Store

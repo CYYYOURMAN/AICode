@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- 连接向导允许用户填任意自托管地址（http/https）；
+         生产环境建议按 README 用 Tailscale 或 HTTPS 反向代理。 -->
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

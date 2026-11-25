@@ -4,14 +4,12 @@
 手机 App 连上你自己托管的 [DSH](https://github.com/deepseek-ai/deepseek-harness) 引擎：
 能对话、读写文件、跑命令、操作手机——数据和服务全在你自己手里。
 
-> 状态：**M0 骨架**（网关 + Docker 部署已能跑通；App 端「连接向导 / 去硬编码」在 M2）。
-
 ## 架构
 
 ```
 ┌─────────────┐   Bearer / 局域网或 HTTPS    ┌──────────────────────────────┐
 │  手机 App    │ ───────────────────────────> │  AIcode Gateway (:3300)       │
-│ (AIcode)    │ <─────────────────────────── │  ├─ token 下发 / 配对         │
+│ (android/)  │ <─────────────────────────── │  ├─ token 下发 / 配对         │
 └─────────────┘                              │  ├─ 手机控制命令队列           │
                                              │  ├─ App 更新通道 / 崩溃上报    │
                                              │  └─ /exec（默认关闭）          │
@@ -29,10 +27,10 @@
 - 一个 DSH 能用的模型 API key（当前是 DeepSeek 官方 key）；
 - 手机：Android 8.0+。
 
-## 快速开始（5 分钟）
+## 快速开始（服务端）
 
 ```bash
-git clone <本仓库地址> aicode && cd aicode
+git clone https://github.com/CYYYOURMAN/AICode.git aicode && cd aicode
 cp .env.example .env
 # 编辑 .env：填 DEEPSEEK_API_KEY（其余可默认）
 docker compose up -d --build
@@ -41,26 +39,43 @@ docker compose up -d --build
 第一次启动会构建镜像（下载 DSH 引擎），大约几分钟。起来后：
 
 ```bash
-# 1) 看网关日志：会打印配对码（6 位数字）
-docker compose logs -f aicode
-
-# 2) 也可以直接读配对码 / 密钥（容器内）
-docker compose exec aicode cat /data/pair-code
-docker compose exec aicode cat /data/secret
+docker compose logs -f aicode          # 看网关日志
+docker compose exec aicode cat /data/pair-code    # 配对码（6 位数字）
+docker compose exec aicode cat /data/secret       # 共享密钥（不想配对时可手填）
 ```
 
 - 网关：`http://你的服务器IP:3300`
 - 引擎：`http://你的服务器IP:3080`
 - 健康检查：`curl http://你的服务器IP:3300/health`
 
-## 手机连接
+## 连接手机（配对）
 
-1. 装 App（Releases 里的 APK，或自己构建 `app/`）；
-2. 首次打开 → 填服务器地址（`http://服务器IP:3300`）→ 填配对码；
-3. 连上后 App 会自动取 token，进入对话。
+1. 装 App：从 [Releases](https://github.com/CYYYOURMAN/AICode/releases) 下载 APK，或自己构建（见下）；
+2. 打开 App，首次会停在「连接服务器」页；
+3. 填 **服务器地址**（例如 `http://192.168.1.10:3300`，或 Tailscale 地址、HTTPS 域名）；
+4. 填 **配对码**（上面的 `cat /data/pair-code`，6 位数字）；
+5. 点「连接」——成功后自动取 token，进入对话。
 
-> 当前 M0 阶段 App 端的连接向导还在开发（M2），可以先用旧版 APK 手动配置。
-> 配对接口已经就绪：`POST /pair/claim {"code":"123456"}` → `{"secret":"..."}`。
+> 配对码用一次就换新的；密钥只存在手机本地，App 里不会再显示明文。
+> 不想跑配对流程时，点「我只想输入密钥」，直接填 `cat /data/secret` 的内容。
+
+**地址填哪个？**
+- 只在家用：服务器局域网 IP（`http://192.168.1.10:3300`）最快；
+- 在家和外面都要用：Tailscale IP（`http://100.x.x.x:3300`）或套了 HTTPS 的域名；
+- 地址只填一个，改地址在 App 设置页「重新配对」。
+
+## 构建 App（可选）
+
+App 是标准 Android 工程（Kotlin + Compose），在 `android/` 目录：
+
+```bash
+cd android
+# 需要 JDK 17 + Android SDK（ANDROID_HOME）
+gradle assembleRelease     # 或 ./gradlew assembleRelease
+```
+
+- 不配签名文件时产出 unsigned APK；自己用的话用 Android Studio 的调试签名装即可。
+- Release 签名：在 `keystore.properties`（不进 git）里配 `storeFile` / `storePassword` / `keyAlias` / `keyPassword`。
 
 ## 推荐的安全部署
 
@@ -94,23 +109,27 @@ gateway.example.com {
 ## 目录结构
 
 ```
-open/
+AICode/
 ├── docker-compose.yml
 ├── .env.example
-├── gateway/
+├── gateway/                 # 服务端网关（Python，stdlib）
 │   ├── Dockerfile
-│   ├── entrypoint.sh     # 起 DSH + 网关
-│   └── gateway.py        # 网关（token/配对/手机控制/更新/崩溃）
+│   ├── entrypoint.sh        # 起 DSH + 网关
+│   └── gateway.py           # token/配对/手机控制/更新/崩溃
+├── android/                 # Android App（Kotlin + Compose）
+│   ├── app/src/main/java/com/aicode/app/...
+│   └── ...
 ├── SECURITY.md
-└── README.md
+├── README.md
+└── LICENSE
 ```
 
 ## 路线图
 
 - [x] M0：网关通用化骨架 + Docker 部署
-- [ ] M1：网关配置化细节、容器验证
-- [ ] M2：App 连接向导（去硬编码 IP/密钥）、连接诊断
-- [ ] M3：文档 + 发版自动化 + GitHub Releases
+- [x] M1：容器构建与接口验证（token/配对/健康检查）
+- [x] M2：App 连接向导（地址 + 配对码）、运行时配置、连接诊断
+- [x] M3：App 源码开源、去个人化、版本号自动递增
 - [ ] M4：社区化（issue 模板、示例 MCP、HTTPS 指南）
 
 ## License

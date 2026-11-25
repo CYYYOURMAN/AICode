@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="shortcut_web">网页</string>
+    <string name="shortcut_web_long">打开 DSH 网页</string>
+    <string name="shortcut_terminal">终端</string>
+    <string name="shortcut_terminal_long">打开服务器终端</string>
+    <string name="shortcut_files">文件</string>
+    <string name="shortcut_files_long">打开服务器文件</string>
+    <string name="shortcut_settings">设置</string>
+    <string name="shortcut_settings_long">打开设置</string>
+    <string name="shortcut_fish">鱼世界</string>
+    <string name="shortcut_fish_long">打开鱼世界</string>
+</resources>
