@@ -25,8 +25,8 @@
 
 ## 下载 APK（已签名，可直接安装）
 
-- App：https://github.com/CYYYOURMAN/AICode/releases/download/v0.12.37/aicode-0.12.37-signed.apk
-- 镜像（国内）：https://cdn.jsdelivr.net/gh/CYYYOURMAN/AICode@main/download/aicode-latest.apk
+- App：https://github.com/CYYYOURMAN/AICode/releases/latest/download/aicode-latest.apk
+- 备用（raw 直链，国内时通时断）：https://raw.githubusercontent.com/CYYYOURMAN/AICode/main/download/aicode-latest.apk
 - 部署指南（发给自己的 AI 照做）：https://cyyyourman.github.io/AICode/deploy-for-ai.md
 
 ## 前置条件
