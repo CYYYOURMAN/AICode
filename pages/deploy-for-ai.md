@@ -21,6 +21,14 @@ mkdir -p ~/aicode && cd ~/aicode
 curl -fsSL "$SITE/aicode-deploy.tar.gz" -o /tmp/aicode-deploy.tar.gz
 tar xzf /tmp/aicode-deploy.tar.gz -C ~/aicode
 ls   # 应看到 docker-compose.yml、.env.example、gateway/
+解压后先跑一次体检（只读，不改任何东西）：
+
+```bash
+cd ~/aicode && bash preflight.sh
+```
+
+每项 `[OK]` 或 `[WARN]` 才继续；出现 `[FAIL]` 先按提示修（端口被占用就改 `.env` 的 `GATEWAY_PORT`/`DSH_PORT`；Docker 权限问题按提示把用户加入 docker 组）。
+
 ```
 或者直接跑一键脚本（会做同样的事）：
 ```bash
