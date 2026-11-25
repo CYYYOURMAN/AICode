@@ -68,8 +68,9 @@ fi
 
 # 部署引导：模型 key 有效性自检（有网络时；失败不阻塞启动，只提示）
 if [ -n "${DEEPSEEK_API_KEY:-}" ]; then
+  # `|| true`：curl 失败（超时/断网）不能触发 set -e，否则容器会反复重启
   key_code=$(curl -s -o /dev/null -w '%{http_code}' -m 8 \
-    -H "Authorization: Bearer $DEEPSEEK_API_KEY" https://api.deepseek.com/models 2>/dev/null)
+    -H "Authorization: Bearer $DEEPSEEK_API_KEY" https://api.deepseek.com/models 2>/dev/null || true)
   [ -n "${key_code:-}" ] || key_code=000
   case "$key_code" in
     200) echo "[entrypoint] 模型 key 验证通过" ;;
