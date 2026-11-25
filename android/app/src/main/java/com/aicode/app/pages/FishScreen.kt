@@ -51,6 +51,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -75,6 +76,7 @@ import com.aicode.app.ui.appCardColor
 import com.aicode.app.ui.appLineColor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import okhttp3.MediaType.Companion.toMediaType
@@ -1038,6 +1040,14 @@ private fun TalkContent(client: com.aicode.app.data.EngineClient?, cookie: Strin
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
 
+    // 消息数量变化（发出 / 收到回复）时滚到最新：按「布局后的 item 数」滚，
+    // 避免 lines.size 领先于 LazyColumn 实际的 itemCount 时越界、被夹回旧位置（表现为前面的消息跳上来）
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.layoutInfo.totalItemsCount }.collect { count ->
+            if (count > 0) runCatching { listState.scrollToItem(count - 1) }
+        }
+    }
+
     fun send() {
         val text = input.trim()
         if (text.isEmpty() || sending) return
@@ -1121,9 +1131,8 @@ private fun TalkContent(client: com.aicode.app.data.EngineClient?, cookie: Strin
             )
         }
         Row(
-            // 输入框自己再抬一次：外层 Column 的 imePadding 在个别布局下不生效时，
-            // 至少保证输入框和发送按钮不会被键盘挡住（发不出去就是这么来的）
-            Modifier.fillMaxWidth().imePadding().padding(horizontal = 16.dp, vertical = 8.dp),
+            // 注意：不要再加 imePadding()——外层 Column 已经加过，双重抬升会把输入框顶出键盘区域
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.Bottom,
         ) {
             OutlinedTextField(
