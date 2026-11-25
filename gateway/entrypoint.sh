@@ -66,5 +66,17 @@ if ! grep -q 'token=' /data/dsh.log 2>/dev/null; then
   tail -5 /data/dsh.log 2>/dev/null || true
 fi
 
+# 部署引导：模型 key 有效性自检（有网络时；失败不阻塞启动，只提示）
+if [ -n "${DEEPSEEK_API_KEY:-}" ]; then
+  key_code=$(curl -s -o /dev/null -w '%{http_code}' -m 8 \
+    -H "Authorization: Bearer $DEEPSEEK_API_KEY" https://api.deepseek.com/models 2>/dev/null || echo 000)
+  case "$key_code" in
+    200) echo "[entrypoint] 模型 key 验证通过" ;;
+    401|403) echo "[entrypoint] 警告：模型 key 无效（HTTP $key_code）——服务能启动，但对话会失败；检查 .env 的 DEEPSEEK_API_KEY" >&2 ;;
+    000) echo "[entrypoint] 提示：连不上 api.deepseek.com，跳过模型 key 验证（不影响启动）" ;;
+    *) echo "[entrypoint] 提示：模型 key 验证返回 HTTP $key_code（不影响启动）" ;;
+  esac
+fi
+
 echo "[entrypoint] 启动 AIcode Gateway"
 exec python3 /app/gateway.py
