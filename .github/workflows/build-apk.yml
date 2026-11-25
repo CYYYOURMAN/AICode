@@ -75,11 +75,17 @@ jobs:
               print('issue report failed:', e)
           PYEOF
 
+      - name: Collect APKs
+        run: |
+          mkdir -p dist
+          find android/app/build/outputs/apk -name "*.apk" -exec cp {} dist/ \;
+          ls -la dist
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: aicode-apk
-          path: android/app/build/outputs/apk/**/*.apk
+          path: dist/*.apk
           if-no-files-found: error
 
   release:
