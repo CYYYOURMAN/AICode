@@ -1,5 +1,7 @@
 # AIcode
 
+[![build-apk](https://github.com/CYYYOURMAN/AICode/actions/workflows/build-apk.yml/badge.svg)](https://github.com/CYYYOURMAN/AICode/actions/workflows/build-apk.yml)
+
 **把一台自己的 Linux 服务器变成「AI 手机助手」。**
 手机 App 连上你自己托管的 [DSH](https://github.com/deepseek-ai/deepseek-harness) 引擎：
 能对话、读写文件、跑命令、操作手机——数据和服务全在你自己手里。
@@ -75,6 +77,8 @@ gradle assembleRelease     # 或 ./gradlew assembleRelease
 ```
 
 - 不配签名文件时产出 unsigned APK；自己用的话用 Android Studio 的调试签名装即可。
+- 推 `v*` tag 时 GitHub Actions 会自动构建并把 APK 上传到 Actions artifact（需要登录 GitHub 下载，
+  在对应 run 页面底部 "Artifacts" 里）。
 - Release 签名：在 `keystore.properties`（不进 git）里配 `storeFile` / `storePassword` / `keyAlias` / `keyPassword`。
 
 ## 推荐的安全部署
