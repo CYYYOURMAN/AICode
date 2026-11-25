@@ -112,9 +112,9 @@ ss -tlnp | grep ":$DSH_PORT"
 1. 服务器地址：`http://<服务器局域网 IP>:$GATEWAY_PORT`（手机走 Tailscale 时换成 Tailscale IP）
 2. 配对码：`<6 位数字>`
 3. App 下载（已签名，可直接安装）：
-   `https://cdn.jsdelivr.net/gh/CYYYOURMAN/AICode@main/download/aicode-latest.apk`
-   备用（国内访问慢时）：`https://raw.githubusercontent.com/CYYYOURMAN/AICode/main/download/aicode-latest.apk`
-   （GitHub Releases 里的 APK 是 unsigned，只给开发者自己签名用；普通用户用上面链接）
+   `https://github.com/CYYYOURMAN/AICode/releases/download/v0.12.37/aicode-0.12.37-signed.apk`
+   镜像（国内访问慢时）：`https://cdn.jsdelivr.net/gh/CYYYOURMAN/AICode@main/download/aicode-latest.apk`，再不行用 `https://raw.githubusercontent.com/CYYYOURMAN/AICode/main/download/aicode-latest.apk`
+   （Release 里另有 unsigned 的 CI 构建，只给开发者自己签名用；普通用户用上面链接）
 
 手机和服务器要在同一网络：同一局域网，或者**两边都连** Tailscale。
 App 连的是**网关端口**（`$GATEWAY_PORT`）；引擎端口（`$DSH_PORT`）必须监听手机能访问到的地址
