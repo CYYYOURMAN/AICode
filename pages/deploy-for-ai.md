@@ -128,6 +128,9 @@ cd "$DEST" && docker compose down -v
 **注意 `-v` 会删数据卷**（配对密钥、DSH 的数据）；只是重装/重启时**不要**加 `-v`，否则要重新配对、重建数据。
 如果装错了目录，删掉 `$DEST` 重来。不要动服务器上其他服务。
 
+## 遇到问题
+先看 [常见问题](troubleshooting.md)：端口冲突、`/health` false、手机连不上引擎、模型 key 401、配对码一次性等。
+
 ## 注意
 - 不要改 `gateway/` 里的代码；更新时重新下载部署包并 `docker compose up -d --build`；
 - 不要把 `.env`、配对码、密钥写到公开的地方；
