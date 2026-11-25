@@ -1,0 +1,114 @@
+name: build-apk
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Install Android platform 35
+        run: |
+          SDKMANAGER="${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then SDKMANAGER="$(command -v sdkmanager || true)"; fi
+          echo "sdkmanager: $SDKMANAGER"
+          if [ -n "$SDKMANAGER" ]; then
+            (yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true)
+            "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0" || true
+          fi
+          ls "${ANDROID_HOME}/platforms" || true
+
+      - name: Build release APK
+        working-directory: android
+        run: gradle assembleRelease --no-daemon --no-build-cache --console=plain 2>&1 | tee /tmp/build.log
+
+      - name: Inspect APK outputs
+        if: always()
+        run: |
+          echo "=== pwd ===" >> /tmp/build.log
+          pwd >> /tmp/build.log 2>&1
+          echo "=== apk tree ===" >> /tmp/build.log
+          ls -R android/app/build/outputs/apk >> /tmp/build.log 2>&1 || true
+          find android -name "*.apk" -size +1M >> /tmp/build.log 2>&1 || true
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: /tmp/build.log
+          if-no-files-found: ignore
+
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: aicode-apk
+          path: |
+            android/app/build/outputs/apk/stable/release/*.apk
+            android/app/build/outputs/apk/beta/release/*.apk
+          if-no-files-found: error
+
+      - name: Report failure as issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          python3 - <<'PYEOF'
+          import json, os, urllib.request
+          try:
+              body = open('/tmp/build.log', errors='replace').read()[-6000:]
+          except Exception:
+              body = 'no build.log'
+          payload = json.dumps({'title': 'CI failure ' + os.environ.get('REF_NAME', ''), 'body': body}).encode()
+          req = urllib.request.Request(
+              'https://api.github.com/repos/CYYYOURMAN/AICode/issues',
+              data=payload,
+              headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'],
+                       'Accept': 'application/vnd.github+json'})
+          try:
+              urllib.request.urlopen(req, timeout=15)
+          except Exception as e:
+              print('issue report failed:', e)
+          PYEOF
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download APK
+        uses: actions/download-artifact@v4
+        with:
+          name: aicode-apk
+          path: dist
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.apk
+          generate_release_notes: true
