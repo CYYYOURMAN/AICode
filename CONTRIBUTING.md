@@ -54,6 +54,6 @@ docs: add https guide
 
 ## 发版
 
-- 版本号在 `android/app/build.gradle.kts`（`versionCode` / `versionName`）。
-- 打 tag（`v0.12.x`）会触发 GitHub Actions 构建 APK 并创建 Release。
-- 自用的签名 APK 不要提交到仓库。
+- 版本号在 `android/app/build.gradle.kts`（`versionCode` / `versionName`）；`app-release` 脚本会在发 beta 时自动递增。
+- 构建好的 APK 不要提交到仓库；发布到 GitHub Releases 时附上（建议自己签名）。
+- 用 Android Studio 或本地 Gradle 构建（`cd android && gradle assembleRelease`）。

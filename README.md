@@ -135,7 +135,7 @@ AICode/
 - [x] M1：容器构建与接口验证（token/配对/健康检查）
 - [x] M2：App 连接向导（地址 + 配对码）、运行时配置、连接诊断
 - [x] M3：App 源码开源、去个人化、版本号自动递增
-- [ ] M4：社区化（issue 模板、示例 MCP、HTTPS 指南）
+- [x] M4：社区化（issue/PR 模板、CONTRIBUTING、HTTPS 指南、MCP 示例）
 
 ## 文档
 
