@@ -22,7 +22,7 @@ DEST="${AICODE_DIR:-$HOME/aicode}"
 mkdir -p "$DEST" && cd "$DEST"
 curl -fsSL "$SITE/aicode-deploy.tar.gz" -o /tmp/aicode-deploy.tar.gz
 tar xzf /tmp/aicode-deploy.tar.gz -C "$DEST"
-ls   # 应看到 docker-compose.yml、.env.example、gateway/、preflight.sh
+ls -a   # 应看到 docker-compose.yml、.env.example（隐藏文件，普通 ls 看不到）、gateway/、preflight.sh
 ```
 
 也可以跑一键脚本（只做下载、解压、体检，**不会**替你填 key，也**不会**自动启动）：
@@ -47,7 +47,7 @@ cd "$DEST" && bash preflight.sh
 ## 2. 配置
 ```bash
 cd "$DEST"
-cp .env.example .env
+[ -f .env ] || cp .env.example .env   # 第 1 节已经建过就别再 cp（会把改过的端口冲回 3300/3080）
 ```
 编辑 `.env`：
 - `DEEPSEEK_API_KEY=` 填主人给的 key；
@@ -83,13 +83,17 @@ docker compose exec -T aicode cat /data/pair-code   # 配对码（6 位数字）
 注意：**配对码是一次性的**，在 App 里配对成功后会自动轮换；再看时用上面的命令重新取。
 网关的共享密钥在容器内 `/data/secret`（配对码就是用它生成的）。
 
+**看到「DSH 已就绪」后别立刻验 `/health`**：DSH 打印 token 和真正开始监听之间还有十几秒，
+这时 `/health` 会返回 `{"ok":false,"port":false}`、`ss` 也看不到引擎端口——不是失败。
+等 15–30 秒再验；第一次 `ok:false` 就隔 10 秒重试一两次，还 false 再按第 5 节看日志。
+
 ## 5. 验证（必须做）
 ```bash
 # 端口从 .env 读（换过端口也不会验错实例）
 GATEWAY_PORT=$(grep -E '^GATEWAY_PORT=' .env | cut -d= -f2); GATEWAY_PORT=${GATEWAY_PORT:-3300}
 DSH_PORT=$(grep -E '^DSH_PORT=' .env | cut -d= -f2); DSH_PORT=${DSH_PORT:-3080}
 
-# 健康检查，应返回 {"ok":true,...}（优先用服务器局域网 IP，别用 127.0.0.1 以外的旧实例）
+# 健康检查，应返回 {"ok":true,"port":true,...}（刚启动 15 秒内可能 ok:false，等一会儿重试）
 curl -s http://127.0.0.1:$GATEWAY_PORT/health
 
 # 配对码能换密钥（应返回 {"ok":true,"secret":"..."}）
@@ -146,10 +150,10 @@ http://<服务器局域网 IP>:$GATEWAY_PORT/health
 告诉主人这三样：
 1. 服务器地址：`http://<服务器局域网 IP>:$GATEWAY_PORT`（手机走 Tailscale 时换成 Tailscale IP）
 2. 配对码：`<6 位数字>`
-3. App 下载（已签名，可直接安装）：
-   `https://github.com/CYYYOURMAN/AICode/releases/latest/download/aicode-latest.apk`
-   下载慢时用 raw 直链（国内时通时断）：`https://raw.githubusercontent.com/CYYYOURMAN/AICode/main/download/aicode-latest.apk`
-   （Release 里另有 unsigned 的 CI 构建，只给开发者自己签名用；普通用户用上面链接）
+3. App 下载（已签名，可直接安装），给两个链接：
+   - 首选 raw 直链（国内一般能下）：`https://raw.githubusercontent.com/CYYYOURMAN/AICode/main/download/aicode-latest.apk`
+   - 备用 GitHub Release：`https://github.com/CYYYOURMAN/AICode/releases/latest/download/aicode-latest.apk`
+   （实测 GitHub Release 在国内网络常整段超时，raw 也不通时再试 Release；Release 里另有 unsigned 的 CI 构建，只给开发者自己签名用）
 
 手机和服务器要在同一网络：同一局域网，或者**两边都连** Tailscale。
 App 连的是**网关端口**（`$GATEWAY_PORT`）；引擎端口（`$DSH_PORT`）必须监听手机能访问到的地址
@@ -161,6 +165,9 @@ App 连的是**网关端口**（`$GATEWAY_PORT`）；引擎端口（`$DSH_PORT`�
 cd "$DEST" && docker compose down -v
 ```
 **注意 `-v` 会删数据卷**（配对密钥、DSH 的数据）；只是重装/重启时**不要**加 `-v`，否则要重新配对、重建数据。
+
+反过来说：只要 compose 项目名还是 `aicode`，卷 `aicode_aicode_data` / `aicode_aicode_dsh_home` 会被**复用**——
+旧配对码、旧引擎配置、旧日志都还在。换目录重来时想要干净环境，就得 `docker compose down -v`。
 如果装错了目录，删掉 `$DEST` 重来。不要动服务器上其他服务。
 
 ## 遇到问题
