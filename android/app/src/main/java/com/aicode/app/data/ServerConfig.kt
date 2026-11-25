@@ -10,11 +10,20 @@ import android.content.Context
  *
  * 存储：SharedPreferences 文件名 `aicode-server`，key `base` / `secret`；
  * [base] 写入前规范化成 `http://host:port` 形式（无尾斜杠）。
+ *
+ * MCP（鱼世界等外部工具服务）也走同一个文件：key `mcp_url` / `mcp_token` / `mcp_enabled`。
+ * 地址是完整 URL（鱼世界模板见 [FISH_WORLD_MCP_URL]），按用户输入原样存、不补协议。
  */
 object ServerConfig {
     private const val PREFS = "aicode-server"
     private const val KEY_BASE = "base"
     private const val KEY_SECRET = "secret"
+    private const val KEY_MCP_URL = "mcp_url"
+    private const val KEY_MCP_TOKEN = "mcp_token"
+    private const val KEY_MCP_ENABLED = "mcp_enabled"
+
+    /** 鱼世界 MCP 地址模板（设置页「填入鱼世界模板」用）。 */
+    const val FISH_WORLD_MCP_URL = "https://api.yuyuworld.app/v1/mcp"
 
     private fun prefs(ctx: Context) =
         ctx.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -37,6 +46,32 @@ object ServerConfig {
 
     fun clear(ctx: Context) {
         prefs(ctx).edit().remove(KEY_BASE).remove(KEY_SECRET).apply()
+    }
+
+    /** MCP 地址；未配置返回 ""。原样返回，不补协议。 */
+    fun mcpUrl(ctx: Context): String = prefs(ctx).getString(KEY_MCP_URL, "") ?: ""
+
+    /** MCP 密钥（Bearer token）；未配置返回 ""。 */
+    fun mcpToken(ctx: Context): String = prefs(ctx).getString(KEY_MCP_TOKEN, "") ?: ""
+
+    /** MCP 开关；默认 false（开源版不预置任何 MCP）。 */
+    fun mcpEnabled(ctx: Context): Boolean = prefs(ctx).getBoolean(KEY_MCP_ENABLED, false)
+
+    /** 保存 MCP 配置：地址/密钥只 trim，不补协议（用户填什么就存什么）。 */
+    fun saveMcp(ctx: Context, url: String, token: String, enabled: Boolean) {
+        prefs(ctx).edit()
+            .putString(KEY_MCP_URL, url.trim())
+            .putString(KEY_MCP_TOKEN, token.trim())
+            .putBoolean(KEY_MCP_ENABLED, enabled)
+            .apply()
+    }
+
+    fun clearMcp(ctx: Context) {
+        prefs(ctx).edit()
+            .remove(KEY_MCP_URL)
+            .remove(KEY_MCP_TOKEN)
+            .remove(KEY_MCP_ENABLED)
+            .apply()
     }
 
     /** 去首尾空格 → 没写协议就补 `http://` → 去尾部 `/`；空串原样返回。 */

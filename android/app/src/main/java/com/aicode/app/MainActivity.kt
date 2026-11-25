@@ -603,6 +603,10 @@ private fun AppShell(
     suspend fun loadEngine() {
         val ep = withContext(Dispatchers.IO) { TokenService.fetch() }
         endpoint = ep
+        // 老版本把鱼世界密钥放在 DSH token 服务里下发；首次升级时迁移到本地 MCP 配置
+        if (ep != null && ServerConfig.mcpToken(ctx).isEmpty() && ep.fishToken.isNotEmpty()) {
+            ServerConfig.saveMcp(ctx, ServerConfig.FISH_WORLD_MCP_URL, ep.fishToken, true)
+        }
         if (ep != null) {
             // 起本地回环转发：127.0.0.1:3080 -> 引擎，让页面 origin 是回环地址（OAuth 回调需要）。
             // 放 IO 线程：start() 会等端口真正 bind 完再返回，紧跟其后的 token 交换才不会失败。
@@ -692,7 +696,13 @@ private fun AppShell(
                             },
                             onReconnect = onReconnect,
                         )
-                        "fish" -> FishScreen(fishToken = endpoint?.fishToken, client = client, cookie = cookie)
+                        "fish" -> FishScreen(
+                            // 设置页的启用开关关闭时，视为未配置（鱼世界页显示配置提示）
+                            mcpUrl = if (ServerConfig.mcpEnabled(ctx)) ServerConfig.mcpUrl(ctx) else "",
+                            mcpToken = ServerConfig.mcpToken(ctx),
+                            client = client,
+                            cookie = cookie,
+                        )
                         else -> EmptyState("页面不存在")
                     }
                 }

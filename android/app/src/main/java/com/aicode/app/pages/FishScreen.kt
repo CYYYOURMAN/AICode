@@ -82,8 +82,6 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
-private const val MCP_URL = "https://api.yuyuworld.app/v1/mcp"
-
 private val fishClient: OkHttpClient by lazy {
     OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
@@ -123,7 +121,10 @@ private val FishTabs = listOf(
 )
 
 @Composable
-fun FishScreen(fishToken: String?, client: com.aicode.app.data.EngineClient?, cookie: String?) {
+fun FishScreen(mcpUrl: String?, mcpToken: String?, client: com.aicode.app.data.EngineClient?, cookie: String?) {
+    val url = mcpUrl.orEmpty()
+    val token = mcpToken.orEmpty()
+    val mcpReady = url.isNotEmpty() && token.isNotEmpty()
     var tab by remember { mutableStateOf("world") }
     var refreshKey by remember { mutableIntStateOf(0) }
     var world by remember { mutableStateOf(TabData()) }
@@ -132,26 +133,25 @@ fun FishScreen(fishToken: String?, client: com.aicode.app.data.EngineClient?, co
     var history by remember { mutableStateOf(TabData()) }
     var friends by remember { mutableStateOf(TabData()) }
 
-    LaunchedEffect(fishToken, tab, refreshKey) {
-        if (fishToken.isNullOrEmpty()) {
-            // token 还没从服务器取回来，先显示加载中；等 fishToken 变化会自动重新加载
-            world = TabData(loading = true)
+    LaunchedEffect(mcpReady, url, token, tab, refreshKey) {
+        if (!mcpReady) {
+            // MCP 没配（设置 → MCP）：不发请求、不刷错误，页面显示「去设置填写」的提示卡片
             return@LaunchedEffect
         }
         when (tab) {
             "world" -> {
                 world = TabData(loading = true)
-                val r = withContext(Dispatchers.IO) { mcp(fishToken, "world_now", "{\"full\":true}") }
+                val r = withContext(Dispatchers.IO) { mcp(url, token, "world_now", "{\"full\":true}") }
                 world = if (r.startsWith("错误")) TabData(error = r) else TabData(text = r)
             }
             "feed" -> {
                 feed = TabData(loading = true)
-                val r = withContext(Dispatchers.IO) { mcp(fishToken, "world_feed", "{\"action\":\"read\"}") }
+                val r = withContext(Dispatchers.IO) { mcp(url, token, "world_feed", "{\"action\":\"read\"}") }
                 feed = if (r.startsWith("错误")) TabData(error = r) else TabData(text = r)
             }
             "me" -> {
                 me = TabData(loading = true)
-                val r = withContext(Dispatchers.IO) { mcp(fishToken, "world_profile", "{}") }
+                val r = withContext(Dispatchers.IO) { mcp(url, token, "world_profile", "{}") }
                 me = if (r.startsWith("错误")) TabData(error = r) else TabData(text = r)
             }
             "talk" -> {
@@ -159,7 +159,7 @@ fun FishScreen(fishToken: String?, client: com.aicode.app.data.EngineClient?, co
             }
             "history" -> {
                 history = TabData(loading = true)
-                val r = withContext(Dispatchers.IO) { mcp(fishToken, "world_history", "{}") }
+                val r = withContext(Dispatchers.IO) { mcp(url, token, "world_history", "{}") }
                 history = if (r.startsWith("错误")) TabData(error = r) else TabData(text = r)
             }
         }
@@ -211,6 +211,7 @@ fun FishScreen(fishToken: String?, client: com.aicode.app.data.EngineClient?, co
                     else -> world
                 }
                 when {
+                    which != "talk" && !mcpReady -> McpNotConfigured()
                     data.loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(modifier = Modifier.size(26.dp), strokeWidth = 2.5.dp)
                     }
@@ -221,8 +222,8 @@ fun FishScreen(fishToken: String?, client: com.aicode.app.data.EngineClient?, co
                         }
                     }
                     else -> when (which) {
-                        "world" -> WorldContent(data.text, fishToken, onRefresh = { refreshKey++ })
-                        "feed" -> FeedContent(data.text, fishToken, onRefresh = { refreshKey++ })
+                        "world" -> WorldContent(data.text, url, token, onRefresh = { refreshKey++ })
+                        "feed" -> FeedContent(data.text, url, token, onRefresh = { refreshKey++ })
                         "me" -> ProfileContent(data.text)
                         "talk" -> TalkContent(client = client, cookie = cookie)
                         else -> HistoryContent(data.text)
@@ -230,6 +231,32 @@ fun FishScreen(fishToken: String?, client: com.aicode.app.data.EngineClient?, co
                 }
             }
         }
+    }
+}
+
+/** 未配置 MCP 时的提示卡片：告诉用户去设置里填，不发请求、不刷错误。 */
+@Composable
+private fun McpNotConfigured() {
+    Column(Modifier.fillMaxSize().padding(horizontal = FishLayout.Gutter)) {
+        AicodeCard {
+            Text(
+                "未配置 MCP",
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "去「设置 → MCP」填写地址和密钥（可用鱼世界模板）。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "地址和密钥只保存在本机；填好后回到这里会自动加载。",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+            )
+        }
+        Spacer(Modifier.height(20.dp))
     }
 }
 
@@ -312,7 +339,8 @@ private fun extractWorldId(line: String): String? {
 }
 
 @Composable
-fun WorldContent(text: String, fishToken: String?, onRefresh: () -> Unit) {
+fun WorldContent(text: String, mcpUrl: String, mcpToken: String, onRefresh: () -> Unit) {
+    val mcpReady = mcpUrl.isNotEmpty() && mcpToken.isNotEmpty()
     val sections = remember(text) {
         splitWorld(text).sortedBy { section ->
             WorldOrder.indexOf(section.title).let { if (it >= 0) it else WorldOrder.size }
@@ -323,11 +351,11 @@ fun WorldContent(text: String, fishToken: String?, onRefresh: () -> Unit) {
     var busy by remember { mutableStateOf(false) }
 
     fun worldAction(tool: String, argsJson: String, label: String) {
-        if (busy || fishToken.isNullOrEmpty()) return
+        if (busy || !mcpReady) return
         busy = true
         notice = "正在$label…"
         scope.launch {
-            val r = withContext(Dispatchers.IO) { mcp(fishToken, tool, argsJson) }
+            val r = withContext(Dispatchers.IO) { mcp(mcpUrl, mcpToken, tool, argsJson) }
             busy = false
             notice = r.lines().firstOrNull { it.isNotBlank() }?.trim()?.take(120) ?: "完成"
             onRefresh()
@@ -362,7 +390,7 @@ fun WorldContent(text: String, fishToken: String?, onRefresh: () -> Unit) {
                 CollapsibleSection(
                     section.title,
                     section.lines,
-                    onAction = if (tool != null && !fishToken.isNullOrEmpty()) {
+                    onAction = if (tool != null && mcpReady) {
                         { id ->
                             val args = if (tool == "world_go") {
                                 "{\"place\":${JSONObject.quote(id)}}"
@@ -594,7 +622,8 @@ private fun parseFeed(raw: String): List<FeedItem> {
 }
 
 @Composable
-private fun FeedContent(text: String, fishToken: String?, onRefresh: () -> Unit) {
+private fun FeedContent(text: String, mcpUrl: String, mcpToken: String, onRefresh: () -> Unit) {
+    val mcpReady = mcpUrl.isNotEmpty() && mcpToken.isNotEmpty()
     val items = remember(text) { parseFeed(text) }
     val scope = rememberCoroutineScope()
     var draft by remember { mutableStateOf("") }
@@ -602,11 +631,11 @@ private fun FeedContent(text: String, fishToken: String?, onRefresh: () -> Unit)
     var notice by remember { mutableStateOf("") }
 
     fun feedAction(json: String, okMsg: String) {
-        if (busy || fishToken.isNullOrEmpty()) return
+        if (busy || !mcpReady) return
         busy = true
         notice = "处理中…"
         scope.launch {
-            val r = withContext(Dispatchers.IO) { mcp(fishToken, "world_feed", json) }
+            val r = withContext(Dispatchers.IO) { mcp(mcpUrl, mcpToken, "world_feed", json) }
             busy = false
             notice = if (r.startsWith("错误")) "失败：$r" else okMsg
             if (!r.startsWith("错误")) onRefresh()
@@ -636,6 +665,13 @@ private fun FeedContent(text: String, fishToken: String?, onRefresh: () -> Unit)
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.weight(1f),
                         )
+                    } else if (!mcpReady) {
+                        Text(
+                            "未配置 MCP · 去「设置 → MCP」填写后才能发布",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f),
+                        )
                     } else {
                         Spacer(Modifier.weight(1f))
                     }
@@ -650,7 +686,7 @@ private fun FeedContent(text: String, fishToken: String?, onRefresh: () -> Unit)
                                 draft = ""
                             }
                         },
-                        enabled = !busy && draft.isNotBlank(),
+                        enabled = !busy && mcpReady && draft.isNotBlank(),
                     ) {
                         Text("发布")
                     }
@@ -704,7 +740,7 @@ private fun FeedContent(text: String, fishToken: String?, onRefresh: () -> Unit)
                         modifier = Modifier.weight(1f),
                     )
                     val postId = item.id.toIntOrNull()
-                    if (postId != null && !fishToken.isNullOrEmpty()) {
+                    if (postId != null && mcpReady) {
                         Text(
                             "赞",
                             style = MaterialTheme.typography.labelMedium,
@@ -1228,27 +1264,30 @@ private fun HistoryContent(raw: String) {
     }
 }
 
-private fun mcp(token: String, name: String, argsJson: String): String = try {
-    val body = """{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"$name","arguments":$argsJson}}"""
-    val req = Request.Builder()
-        .url(MCP_URL)
-        .header("Authorization", "Bearer $token")
-        .header("content-type", "application/json")
-        .header("accept", "application/json, text/event-stream")
-        .post(body.toRequestBody("application/json".toMediaType()))
-        .build()
-    fishClient.newCall(req).execute().use { r ->
-        val s = r.body?.string().orEmpty()
-        if (!r.isSuccessful) return "错误：HTTP ${r.code}"
-        val o = try {
-            JSONObject(s)
-        } catch (_: Exception) {
-            return "错误：返回不是 JSON（${s.take(80)}）"
+private fun mcp(url: String, token: String, name: String, argsJson: String): String {
+    if (url.isBlank() || token.isBlank()) return "错误：未配置 MCP"
+    return try {
+        val body = """{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"$name","arguments":$argsJson}}"""
+        val req = Request.Builder()
+            .url(url)
+            .header("Authorization", "Bearer $token")
+            .header("content-type", "application/json")
+            .header("accept", "application/json, text/event-stream")
+            .post(body.toRequestBody("application/json".toMediaType()))
+            .build()
+        fishClient.newCall(req).execute().use { r ->
+            val s = r.body?.string().orEmpty()
+            if (!r.isSuccessful) return "错误：HTTP ${r.code}"
+            val o = try {
+                JSONObject(s)
+            } catch (_: Exception) {
+                return "错误：返回不是 JSON（${s.take(80)}）"
+            }
+            val arr = o.optJSONObject("result")?.optJSONArray("content")
+            if (arr == null || arr.length() == 0) return "错误：返回为空"
+            arr.optJSONObject(0)?.optString("text") ?: "错误：没有文本内容"
         }
-        val arr = o.optJSONObject("result")?.optJSONArray("content")
-        if (arr == null || arr.length() == 0) return "错误：返回为空"
-        arr.optJSONObject(0)?.optString("text") ?: "错误：没有文本内容"
+    } catch (e: Exception) {
+        "错误：${e.message}"
     }
-} catch (e: Exception) {
-    "错误：${e.message}"
 }

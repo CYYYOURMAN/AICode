@@ -25,9 +25,11 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -46,6 +48,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.aicode.app.ControlService
 import com.aicode.app.OverlayCapsule
@@ -118,6 +121,12 @@ fun SettingsScreen(
     var repairResult by remember { mutableStateOf<String?>(null) }
     // 服务器配置进页面读一次即可：「重新配对」清掉后会由 MainActivity 切回连接页
     val serverBase = remember { ServerConfig.base(ctx) }
+    // MCP 配置（地址/密钥/开关）：设置页可改，鱼世界页重新进入后生效
+    var mcpUrl by remember { mutableStateOf(ServerConfig.mcpUrl(ctx)) }
+    var mcpToken by remember { mutableStateOf(ServerConfig.mcpToken(ctx)) }
+    var mcpEnabled by remember { mutableStateOf(ServerConfig.mcpEnabled(ctx)) }
+    var showMcpDialog by remember { mutableStateOf(false) }
+    var mcpNotice by remember { mutableStateOf("") }
     val currentVersion = remember {
         runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName ?: "?" }.getOrDefault("?")
     }
@@ -372,6 +381,48 @@ fun SettingsScreen(
             }
 
             Spacer(Modifier.height(18.dp))
+            SectionTitle("MCP")
+            AicodeCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("自定义 MCP", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "地址：${if (mcpUrl.isNotEmpty()) mcpUrl else "未配置"}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = mcpEnabled,
+                        onCheckedChange = { on ->
+                            mcpEnabled = on
+                            ServerConfig.saveMcp(ctx, mcpUrl, mcpToken, on)
+                            mcpNotice = if (on) "MCP 已启用" else "MCP 已停用"
+                        },
+                    )
+                }
+                Spacer(Modifier.height(10.dp))
+                DividerLine()
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    "MCP 是外部工具服务（鱼世界就是一个 MCP）。地址和密钥只保存在本机，密钥不会在这里显示。",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                TextButton(onClick = { showMcpDialog = true }) {
+                    Text("配置 MCP")
+                }
+                if (mcpNotice.isNotEmpty()) {
+                    Text(
+                        mcpNotice,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(start = 6.dp, bottom = 4.dp),
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(18.dp))
             SectionTitle("关于")
             AicodeCard {
                 SettingRow(
@@ -449,6 +500,58 @@ fun SettingsScreen(
                 modifier = Modifier.padding(start = 6.dp, bottom = 24.dp),
             )
         }
+    }
+
+    if (showMcpDialog) {
+        // 弹窗每次打开时从当前配置预填；remember 放在 if 内，关闭即丢弃草稿
+        var urlDraft by remember { mutableStateOf(mcpUrl) }
+        var tokenDraft by remember { mutableStateOf(mcpToken) }
+        AlertDialog(
+            onDismissRequest = { showMcpDialog = false },
+            title = { Text("MCP 配置") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = urlDraft,
+                        onValueChange = { urlDraft = it },
+                        label = { Text("地址") },
+                        placeholder = { Text("https://…/mcp") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = tokenDraft,
+                        onValueChange = { tokenDraft = it },
+                        label = { Text("密钥") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    TextButton(onClick = { urlDraft = ServerConfig.FISH_WORLD_MCP_URL }) {
+                        Text("填入鱼世界模板")
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        ServerConfig.saveMcp(ctx, urlDraft, tokenDraft, mcpEnabled)
+                        mcpUrl = urlDraft.trim()
+                        mcpToken = tokenDraft.trim()
+                        showMcpDialog = false
+                        mcpNotice = "已保存，鱼世界页重新进入后生效"
+                    },
+                ) {
+                    Text("保存")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showMcpDialog = false }) {
+                    Text("取消")
+                }
+            },
+        )
     }
 }
 
