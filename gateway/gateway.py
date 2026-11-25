@@ -45,11 +45,13 @@ DATA.mkdir(parents=True, exist_ok=True)
 
 SECRET_FILE = DATA / "secret"
 PAIR_CODE_FILE = DATA / "pair-code"
-CRASH_LOG = DATA / "crash.log"
+CRASH_LOG = pathlib.Path(os.environ.get("CRASH_LOG_PATH", str(DATA / "crash.log")))
 APP_DIR = pathlib.Path(os.environ.get("APP_CHANNEL_DIR", str(DATA / "app")))
 DSH_TOKEN_LOG = pathlib.Path(os.environ.get("DSH_TOKEN_LOG", str(DATA / "dsh.log")))
 DSH_TOKEN_CMD = os.environ.get("DSH_TOKEN_CMD", "").strip()
 DSH_BASE = os.environ.get("DSH_BASE", "").strip()
+DSH_HOST = os.environ.get("DSH_HOST", "127.0.0.1").strip()
+DSH_PORT = int(os.environ.get("DSH_PORT", "3080"))
 PHONE_ENABLED = os.environ.get("PHONE_ENABLED", "1") not in ("0", "false", "no")
 EXEC_ENABLED = os.environ.get("EXEC_ENABLED", "0") in ("1", "true", "yes")
 CRASH_MAX_BYTES = int(os.environ.get("CRASH_MAX_BYTES", "1048576"))
@@ -223,12 +225,20 @@ class Handler(BaseHTTPRequestHandler):
         self._drain_body()
         self._json({"ok": False, "error": "unauthorized"}, 401)
 
+    def _go_key_ok(self) -> bool:
+        """浏览器打不开 Authorization 头，/go 允许 ?k=<secret>（与 token-server 行为一致）。"""
+        if not SECRET:
+            return False
+        q = urllib.parse.urlparse(self.path).query
+        k = urllib.parse.parse_qs(q).get("k", [""])[0]
+        return bool(k) and hmac.compare_digest(k, SECRET)
+
     # ---- GET ----
     def do_GET(self):
         if self.path.startswith("/health"):
             ok_port = False
             try:
-                with socket.create_connection(("127.0.0.1", int(os.environ.get("DSH_PORT", "3080"))), timeout=2):
+                with socket.create_connection((DSH_HOST, DSH_PORT), timeout=2):
                     ok_port = True
             except Exception:
                 pass
@@ -236,9 +246,24 @@ class Handler(BaseHTTPRequestHandler):
                         "time": time.strftime("%Y-%m-%d %H:%M:%S")})
             return
         if not self._authed():
-            self._unauthorized()
-            return
+            # /go 允许用 ?k= 换取跳转（浏览器场景）
+            if not (self.path.startswith("/go") and self._go_key_ok()):
+                self._unauthorized()
+                return
         path = self.path
+        if path.startswith("/go"):
+            token = latest_token()
+            if not token:
+                self._send(b"engine token not ready", 503, "text/plain; charset=utf-8")
+                return
+            target = app_base(self) + "/?token=" + token
+            html = ('<!doctype html><meta charset="utf-8">'
+                    '<meta http-equiv="refresh" content="0;url=' + target + '">'
+                    '<title>AIcode</title>'
+                    '<p style="font:16px -apple-system;padding:24px">正在进入 AIcode…'
+                    '<br><a href="' + target + '">点这里如果没有自动跳转</a></p>')
+            self._send(html.encode(), ctype="text/html; charset=utf-8")
+            return
         if path.startswith("/pair/code"):
             # 管理员查看当前配对码（也可直接看 DATA_DIR/pair-code）
             self._json({"code": pair_code()})
