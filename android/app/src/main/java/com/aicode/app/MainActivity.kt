@@ -500,7 +500,10 @@ private fun AppShell(
         if (page == "web") {
             val left = webLeftAt
             val idle = if (left > 0) System.currentTimeMillis() - left else 0L
-            if (left > 0 && idle > 10 * 60 * 1000L && webView.url != null && !webLoading) {
+            // 重载阈值可配置（设置页「网页自动重载」；0 = 关闭）
+            val reloadMin = ctx.getSharedPreferences("aicode", android.content.Context.MODE_PRIVATE)
+                .getInt("webReloadMinutes", 10)
+            if (reloadMin > 0 && left > 0 && idle > reloadMin * 60_000L && webView.url != null && !webLoading) {
                 webView.reload()
             }
             webLeftAt = 0L
@@ -528,7 +531,9 @@ private fun AppShell(
                     lastResumeAt = System.currentTimeMillis()
                     val left = bgLeftAt
                     bgLeftAt = 0L
-                    if (left > 0 && System.currentTimeMillis() - left > 10 * 60 * 1000L &&
+                    val reloadMin = ctx.getSharedPreferences("aicode", android.content.Context.MODE_PRIVATE)
+                        .getInt("webReloadMinutes", 10)
+                    if (reloadMin > 0 && left > 0 && System.currentTimeMillis() - left > reloadMin * 60_000L &&
                         pageNow.value == "web" && !webLoadingNow.value && webView.url != null
                     ) {
                         webView.reload()

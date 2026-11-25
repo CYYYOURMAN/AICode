@@ -79,6 +79,9 @@ fun SettingsScreen(
 ) {
     val dark = LocalIsDark.current
     val ctx = LocalContext.current
+    val prefs = remember { ctx.getSharedPreferences("aicode", Context.MODE_PRIVATE) }
+    var reloadMinutes by remember { mutableStateOf(prefs.getInt("webReloadMinutes", 10)) }
+    var showReloadDialog by remember { mutableStateOf(false) }
     // 无障碍状态读系统全局设置：测试版（com.aicode.app.beta）本包服务没开时，靠稳定版
     // （com.aicode.app）的无障碍服务干活，只看本进程 instance 会把它误报成「未开启」。
     var a11yState by remember { mutableStateOf(readA11yState(ctx)) }
@@ -214,6 +217,48 @@ fun SettingsScreen(
                     trailing = {
                         Switch(checked = dark, onCheckedChange = onThemeChange)
                     },
+                )
+                Spacer(Modifier.height(12.dp))
+                DividerLine()
+                SettingRow(
+                    icon = painterResource(R.drawable.ic_tab_web),
+                    title = "网页自动重载",
+                    subtitle = if (reloadMinutes == 0) "关闭（长会话可能变卡）"
+                    else "离开超过 $reloadMinutes 分钟自动重载",
+                    onClick = { showReloadDialog = true },
+                )
+            }
+            if (showReloadDialog) {
+                AlertDialog(
+                    onDismissRequest = { showReloadDialog = false },
+                    title = { Text("网页自动重载") },
+                    text = {
+                        Column {
+                            Text(
+                                "离开网页超过所选时间再回来，会自动重载一次，清掉累积的页面内容（长会话更流畅）。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            listOf(5 to "5 分钟", 10 to "10 分钟（默认）", 30 to "30 分钟", 0 to "关闭").forEach { (m, label) ->
+                                Text(
+                                    label,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = if (m == reloadMinutes) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            reloadMinutes = m
+                                            prefs.edit().putInt("webReloadMinutes", m).apply()
+                                            showReloadDialog = false
+                                        }
+                                        .padding(vertical = 12.dp),
+                                )
+                            }
+                        }
+                    },
+                    confirmButton = {},
                 )
             }
 
