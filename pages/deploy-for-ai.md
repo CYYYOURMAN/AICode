@@ -11,7 +11,9 @@
   没有就先装（Debian/Ubuntu）：`apt install docker.io docker-compose-v2`；
   当前用户要能用 docker：`docker info` 报权限错误时，`sudo usermod -aG docker $USER` 后重新登录；
 - 确认 3300（网关）和 3080（引擎）端口没被占用：`ss -tlnp | grep -E ':3300|:3080'`；
-  被占用就记下，后面在 `.env` 里改 `GATEWAY_PORT` / `DSH_PORT`（两个都要改，且不能相同）；
+  被占用就记下，后面在 `.env` 里改 `GATEWAY_PORT`（**优先只改这个**）。
+  **`DSH_PORT` 尽量保持 3080**：App 0.12.40 之前的版本把引擎端口写死成 3080，改了会出现「配对成功但网页打不开」。
+  只有 App ≥ 0.12.40 且你确认过时才改 `DSH_PORT`（改了网页才打得开）；两个端口不能相同；
 - 记下这台服务器的**局域网 IP**（`hostname -I` 的第一个地址，例如 `192.168.1.10`）——手机要连它；
 - 向主人要一个模型 API key（DeepSeek 官方 key，`sk-` 开头）。
 
@@ -32,9 +34,9 @@ curl -fsSL "$SITE/install.sh" | AICODE_SITE="$SITE" bash
 
 已有别的服务占用 3300/3080、或者想多开一份时，用独立目录和端口（一键脚本会写进 `.env`）：
 ```bash
-curl -fsSL "$SITE/install.sh" | AICODE_SITE="$SITE" AICODE_DIR="$HOME/aicode-test" AICODE_GATEWAY_PORT=13300 AICODE_DSH_PORT=13080 bash
+curl -fsSL "$SITE/install.sh" | AICODE_SITE="$SITE" AICODE_DIR="$HOME/aicode-test" AICODE_GATEWAY_PORT=13300 bash
 ```
-手动部署时，直接在 `$DEST/.env` 里改 `GATEWAY_PORT` / `DSH_PORT`（两个都改）。
+手动部署时，直接在 `$DEST/.env` 里改 `GATEWAY_PORT`；`DSH_PORT` 保持 3080（原因见上一条）。
 
 先建好 `.env` 再跑体检（体检要读 `.env` 才知道最终端口；没有 `.env` 时端口检查会跳过）：
 ```bash
@@ -42,7 +44,7 @@ cd "$DEST" && ( [ -f .env ] || cp .env.example .env )
 cd "$DEST" && bash preflight.sh
 ```
 
-每项 `[OK]` 或 `[WARN]` 才继续；出现 `[FAIL]` 先按提示修（端口被占用就改 `.env` 的 `GATEWAY_PORT`/`DSH_PORT`；Docker 权限问题按提示把用户加入 docker 组）。
+每项 `[OK]` 或 `[WARN]` 才继续；出现 `[FAIL]` 先按提示修（端口被占用就改 `.env` 的 `GATEWAY_PORT`——优先只改这个，`DSH_PORT` 保持 3080；Docker 权限问题按提示把用户加入 docker 组）。
 
 ## 2. 配置
 ```bash
@@ -51,7 +53,7 @@ cd "$DEST"
 ```
 编辑 `.env`：
 - `DEEPSEEK_API_KEY=` 填主人给的 key；
-- 端口被占用时改 `GATEWAY_PORT`（默认 3300）和 `DSH_PORT`（默认 3080）；
+- 端口被占用时改 `GATEWAY_PORT`（默认 3300）；`DSH_PORT` 保持 3080（App 旧版写死 3080，改了网页打不开）；
 - `DSH_HOST=` **留空**（启动时会自动探测服务器对外 IP）；不要填 `127.0.0.1`，否则手机连不上引擎；
   自动探测不对时，填服务器局域网 IP（例如 `192.168.1.10`）。手机走 Tailscale 时填服务器的
   Tailscale IP（`100.x.y.z`）——DSH 只能绑定一个具体地址，不能同时监听局域网和 Tailscale；
