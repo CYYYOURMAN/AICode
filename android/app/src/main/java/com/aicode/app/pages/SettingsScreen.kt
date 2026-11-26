@@ -83,7 +83,7 @@ fun SettingsScreen(
     resetSignal: Int = 0,
     followSystem: Boolean = false,
     onFollowSystemChange: (Boolean) -> Unit = {},
-    accent: com.aicode.app.ui.AppAccent = com.aicode.app.ui.AppAccent.Teal,
+    accent: com.aicode.app.ui.AppAccent = com.aicode.app.ui.AppAccent.Blue,
     onAccentChange: (com.aicode.app.ui.AppAccent) -> Unit = {},
     fontSize: com.aicode.app.ui.AppFontSize = com.aicode.app.ui.AppFontSize.Medium,
     onFontSizeChange: (com.aicode.app.ui.AppFontSize) -> Unit = {},

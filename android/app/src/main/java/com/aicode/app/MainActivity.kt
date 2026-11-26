@@ -209,7 +209,7 @@ class MainActivity : ComponentActivity() {
             // 外观自定义（2026-11-26）：跟随系统深浅 + 主题色
             var followSystem by remember { mutableStateOf(prefs.getBoolean("followSystem", false)) }
             var accent by remember {
-                mutableStateOf(com.aicode.app.ui.AppAccent.of(prefs.getString("accent", "teal")))
+                mutableStateOf(com.aicode.app.ui.AppAccent.of(prefs.getString("accent", "blue")))
             }
             var fontSize by remember {
                 mutableStateOf(com.aicode.app.ui.AppFontSize.of(prefs.getString("fontSize", "medium")))
@@ -303,7 +303,7 @@ private fun AppShell(
     onThemeChange: (Boolean) -> Unit,
     followSystem: Boolean = false,
     onFollowSystemChange: (Boolean) -> Unit = {},
-    accent: com.aicode.app.ui.AppAccent = com.aicode.app.ui.AppAccent.Teal,
+    accent: com.aicode.app.ui.AppAccent = com.aicode.app.ui.AppAccent.Blue,
     onAccentChange: (com.aicode.app.ui.AppAccent) -> Unit = {},
     resumeTick: Int = 0,
     fontSize: com.aicode.app.ui.AppFontSize = com.aicode.app.ui.AppFontSize.Medium,

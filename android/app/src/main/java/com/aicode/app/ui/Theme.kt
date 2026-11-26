@@ -54,7 +54,7 @@ enum class AppAccent(val key: String, val label: String) {
     Amber("amber", "橙");
 
     companion object {
-        fun of(key: String?): AppAccent = entries.firstOrNull { it.key == key } ?: Teal
+        fun of(key: String?): AppAccent = entries.firstOrNull { it.key == key } ?: Blue
     }
 }
 
@@ -186,7 +186,7 @@ private fun buildTypography(fontScale: Float, lineScale: Float): Typography {
 @Composable
 fun AicodeTheme(
     dark: Boolean,
-    accent: AppAccent = AppAccent.Teal,
+    accent: AppAccent = AppAccent.Blue,
     fontSize: AppFontSize = AppFontSize.Medium,
     density: AppDensity = AppDensity.Standard,
     content: @Composable () -> Unit,
