@@ -30,6 +30,44 @@ docker info >$null; if ($LASTEXITCODE -eq 0) { "docker OK" }
 
 **确认用的是 Linux 容器**：Docker Desktop 右下角/设置里，容器类型要是 `Linux`（Windows 容器的镜像跑不了这个部署包）。
 
+> Docker Desktop 装完**不会自动启动**。要手动打开（桌面图标或开始菜单），等左下角绿了再往下做。
+
+## 1.1 配镜像加速（国内必做，不配必失败）
+
+Docker Hub 在国内基本拉不动。不配这个，`up --build` 会卡在拉 `node:24-slim`：
+
+```
+failed to resolve source metadata for docker.io/library/node:24-slim ... dial tcp ... i/o timeout
+```
+
+配法：**右键托盘里的 Docker 图标 → Settings → Docker Engine**，把 JSON 改成：
+
+```json
+{
+  "registry-mirrors": ["https://docker.m.daocloud.io", "https://dockerproxy.com"]
+}
+```
+
+点 **Apply & restart**，等引擎重新变绿。验证：
+
+```powershell
+docker pull node:24-slim
+# 能下载完、最后出现 "Status: Downloaded newer image for node:24-slim" 就行
+```
+
+## 1.2 Docker Desktop 卡在启动 / 一直转圈
+
+国内网络下它启动时会去连 `hub.docker.com` 拉配置，超时就不动了（日志里能看到 `fetching features from remote https://hub.docker.com/...`）。
+临时办法（管理员 PowerShell）：
+
+```powershell
+Add-Content C:\Windows\System32\drivers\etc\hosts "127.0.0.1 hub.docker.com"
+```
+
+然后右键托盘图标 **Restart**。启动成功后把这个 hosts 行删掉也行（留着不影响部署，只是 Docker 的在线功能用不了）。
+
+> 2026-11-26 在 Windows 10 22H2 + Docker Desktop 4.99 上实测：**这两条都是必须的**，否则引擎起不来 / 镜像拉不下来。
+
 ## 2. 下载部署包
 
 ```powershell
@@ -68,6 +106,9 @@ docker compose -f docker-compose.windows.yml up -d --build
 第一次会构建镜像（拉 DSH 引擎），看网络约 5–15 分钟。
 
 ## 5. 验证
+
+> 第一次 `up --build` 后 DSB 引擎要 20–40 秒才打印 token，`/health` 之前可能是 `ok: false`，等一下再试。
+
 
 ```powershell
 # 端口应该是 0.0.0.0:3300 / 0.0.0.0:3080（Docker 的端口映射）
