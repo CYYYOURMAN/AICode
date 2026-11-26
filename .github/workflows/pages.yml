@@ -1,3 +1,9 @@
+# pages —— 把 pages/ 目录发布到 GitHub Pages
+#
+# 为什么不用 upload-pages-artifact + deploy-pages：
+# 那套依赖 GitHub 的 artifact 服务，2026-11-26 一天抽风 4 次
+# （"Fetching artifact metadata failed"，重跑才成功）。
+# 现在改成直接 push 到 gh-pages 分支，GitHub 从分支发布——少一环，也少一个失败点。
 name: pages
 
 on:
@@ -7,9 +13,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
   group: pages
@@ -18,13 +22,19 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: pages
-      - id: deployment
-        uses: actions/deploy-pages@v4
+
+      - name: Publish pages/ to gh-pages branch
+        run: |
+          set -e
+          cd pages
+          git init -q -b gh-pages
+          git config user.name "AIcode"
+          git config user.email "aicode@local"
+          git add -A
+          git commit -q -m "deploy: $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+          git push -f \
+            "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" \
+            gh-pages
+          echo "已发布到 gh-pages 分支"
