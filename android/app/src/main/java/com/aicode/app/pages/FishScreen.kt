@@ -273,7 +273,7 @@ private fun FishPill(label: String, selected: Boolean, onClick: () -> Unit) {
         color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier
             .clip(shape)
-            .background(if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else appCardColor())
+            .background(if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.20f) else appCardColor())
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 8.dp),
     )

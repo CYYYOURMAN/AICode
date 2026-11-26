@@ -17,9 +17,17 @@ import java.net.URL
 object PhoneBridge {
     private var lastPushAt = 0L
 
-    /** 由 ControlService 定时调用（约 1 秒一次）。测试版不参与手机控制，避免和稳定版抢命令。 */
+    /**
+     * 由 ControlService 定时调用（约 1 秒一次）。
+     *
+     * 谁能控制手机：**两个包都轮询，谁先取到命令谁执行**（2026-11-26 改）。
+     *
+     * 为什么不再按包名排除：网关的 /phone/cmd 是 `PHONE_CMDS.pop(0)`，命令取一次就删，
+     * 两个包同时轮询也不会重复执行。而「按无障碍开关判断谁能干」并不可靠——
+     * 系统设置里显示「已开启」，进程被省电冻结时服务其实没在跑，结果两个都不干活。
+     * 现在谁活着谁接，发版/冻结/装包撤授权都不会让控制断掉。
+     */
     fun tick(ctx: Context) {
-        if (ctx.packageName.endsWith(".beta")) return
         // 无障碍服务可能先于 MainActivity 被系统拉起：这里补一次 init，否则读不到运行时配置。
         ServerHost.init(ctx)
         pollCmd(ctx)

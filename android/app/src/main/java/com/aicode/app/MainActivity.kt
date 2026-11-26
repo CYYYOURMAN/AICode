@@ -28,10 +28,15 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
@@ -69,6 +74,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -92,6 +100,9 @@ import com.aicode.app.pages.TerminalScreen
 import com.aicode.app.ui.AicodeTheme
 import com.aicode.app.ui.EmptyState
 import com.aicode.app.ui.LoadingState
+import com.aicode.app.ui.appBackgroundBrush
+import com.aicode.app.ui.appCardColor
+import com.aicode.app.ui.appLineColor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -156,7 +167,18 @@ class MainActivity : ComponentActivity() {
         lifeLog("onCreate saved=" + (savedInstanceState != null))
         CrashReporter.install(this)
         pendingSession.value = intent?.getStringExtra("session")
-        enableEdgeToEdge()
+        // 系统栏必须真透明：默认参数会给导航栏垫一层 90% 白遮罩，导致底部手势条区域发白、
+        // 和页面的雾蓝/墨绿渐变对不上（2026-11-26 WebView 页实测）。
+        enableEdgeToEdge(
+            statusBarStyle = androidx.activity.SystemBarStyle.auto(
+                android.graphics.Color.TRANSPARENT,
+                android.graphics.Color.TRANSPARENT,
+            ),
+            navigationBarStyle = androidx.activity.SystemBarStyle.auto(
+                android.graphics.Color.TRANSPARENT,
+                android.graphics.Color.TRANSPARENT,
+            ),
+        )
         // ServerHost 先初始化：探测当前网络该走局域网还是 Tailscale。
         // 本地回环转发（LocalProxy）不在这里起——loadEngine() 拿到真实地址后在 IO 线程启动，
         // 这里如果固定用 ServerHost.host()，离家后会指向错误目标。
@@ -176,27 +198,60 @@ class MainActivity : ComponentActivity() {
         // POST_NOTIFICATIONS 不在这里弹窗：设置页「回合完成通知」点击进系统通知设置
         setContent {
             var dark by remember { mutableStateOf(prefs.getBoolean("dark", true)) }
+            // 外观自定义（2026-11-26）：跟随系统深浅 + 主题色
+            var followSystem by remember { mutableStateOf(prefs.getBoolean("followSystem", false)) }
+            var accent by remember {
+                mutableStateOf(com.aicode.app.ui.AppAccent.of(prefs.getString("accent", "teal")))
+            }
+            var fontSize by remember {
+                mutableStateOf(com.aicode.app.ui.AppFontSize.of(prefs.getString("fontSize", "medium")))
+            }
+            var density by remember {
+                mutableStateOf(com.aicode.app.ui.AppDensity.of(prefs.getString("density", "standard")))
+            }
+            val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
+            val effectiveDark = if (followSystem) systemDark else dark
             // 还没配置服务器（首次安装，或设置页点了「重新配对」）时先走连接向导；
             // 配置好之后才进主界面，AppShell 的 LaunchedEffect 会自动重新 loadEngine。
             var configured by remember { mutableStateOf(ServerConfig.isConfigured(applicationContext)) }
             if (!configured) {
                 ConnectScreen(onConnected = { configured = true })
             } else {
-                AicodeTheme(dark = dark) {
+                AicodeTheme(dark = effectiveDark, accent = accent, fontSize = fontSize, density = density) {
                     val view = LocalView.current
                     SideEffect {
                         val window = (view.context as? Activity)?.window ?: return@SideEffect
                         val controller = WindowCompat.getInsetsController(window, view)
-                        controller.isAppearanceLightStatusBars = !dark
-                        controller.isAppearanceLightNavigationBars = !dark
+                        controller.isAppearanceLightStatusBars = !effectiveDark
+                        controller.isAppearanceLightNavigationBars = !effectiveDark
                         window.setBackgroundDrawable(
                             android.graphics.drawable.ColorDrawable(
-                                if (dark) 0xFF151517.toInt() else 0xFFFFFFFF.toInt(),
+                                if (effectiveDark) 0xFF151517.toInt() else 0xFFFFFFFF.toInt(),
                             ),
                         )
                     }
                     AppShell(
-                        dark = dark,
+                        dark = effectiveDark,
+                        followSystem = followSystem,
+                        onFollowSystemChange = { v ->
+                            followSystem = v
+                            prefs.edit().putBoolean("followSystem", v).apply()
+                        },
+                        accent = accent,
+                        onAccentChange = { v ->
+                            accent = v
+                            prefs.edit().putString("accent", v.key).apply()
+                        },
+                        fontSize = fontSize,
+                        onFontSizeChange = { v ->
+                            fontSize = v
+                            prefs.edit().putString("fontSize", v.key).apply()
+                        },
+                        density = density,
+                        onDensityChange = { v ->
+                            density = v
+                            prefs.edit().putString("density", v.key).apply()
+                        },
                         onThemeChange = { value ->
                             dark = value
                             prefs.edit().putBoolean("dark", value).apply()
@@ -225,18 +280,25 @@ private fun localizeBase(base: String): String {
 
 private data class TabSpec(val id: String, val label: String, val icon: Int)
 
+// 底部只留两个标签（2026-11-26 文案改版）：终端 / 文件 / 鱼世界收进「我的 → 更多功能」。
+// 页面对应的分支还在 AppShell 的 when(page) 里，只是入口变了。
 private val AppTabs = listOf(
-    TabSpec("web", "网页", R.drawable.ic_tab_web),
-    TabSpec("terminal", "终端", R.drawable.ic_tab_terminal),
-    TabSpec("files", "文件", R.drawable.ic_tab_files),
-    TabSpec("settings", "设置", R.drawable.ic_tab_settings),
-    TabSpec("fish", "鱼世界", R.drawable.ic_tab_fish),
+    TabSpec("web", "对话", R.drawable.ic_tab_web),
+    TabSpec("settings", "我的", R.drawable.ic_tab_settings),
 )
 
 @Composable
 private fun AppShell(
     dark: Boolean,
     onThemeChange: (Boolean) -> Unit,
+    followSystem: Boolean = false,
+    onFollowSystemChange: (Boolean) -> Unit = {},
+    accent: com.aicode.app.ui.AppAccent = com.aicode.app.ui.AppAccent.Teal,
+    onAccentChange: (com.aicode.app.ui.AppAccent) -> Unit = {},
+    fontSize: com.aicode.app.ui.AppFontSize = com.aicode.app.ui.AppFontSize.Medium,
+    onFontSizeChange: (com.aicode.app.ui.AppFontSize) -> Unit = {},
+    density: com.aicode.app.ui.AppDensity = com.aicode.app.ui.AppDensity.Standard,
+    onDensityChange: (com.aicode.app.ui.AppDensity) -> Unit = {},
     pendingSession: String?,
     startTab: String?,
     onSessionHandled: () -> Unit,
@@ -253,6 +315,8 @@ private fun AppShell(
     LaunchedEffect(page) {
         pagePrefs.edit().putString("page", page).apply()
     }
+    // 「我的」页的二级菜单回到一级：点底栏同一个标签时递增，SettingsScreen 监听它重置
+    var settingsKey by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
     // 非网页页按返回：先回网页页（不然一按就退出 App）；网页页保持系统默认（退出）。
     // 返回键 / 侧滑手势：非网页页先回网页页；**在网页页不退出 App，而是退到后台**
@@ -370,10 +434,10 @@ private fun AppShell(
                         webLoading = false
                         if (reconnectTries < 5) {
                             reconnectTries++
-                            webError = "网络没连上，正在自动重试（$reconnectTries/5）…"
+                            webError = "网络不稳，正在重试（$reconnectTries/5）…"
                             view?.postDelayed({ webRetryKey++ }, 4000)
                         } else {
-                            webError = "网络没连上，检查一下 Wi-Fi 或流量"
+                            webError = "网络断了。检查 Wi-Fi 或流量。"
                         }
                     }
                 }
@@ -392,7 +456,7 @@ private fun AppShell(
                             webRetryKey++
                         } else {
                             webLoading = false
-                            webError = "登录状态失效，点右上角刷新重试"
+                            webError = "登录过期了，点右上角刷新一下"
                         }
                     }
                 }
@@ -575,7 +639,7 @@ private fun AppShell(
             if (ep == null) null else "${localizeBase(ep.base)}/?token=${ep.token}"
         }
         if (url == null) {
-            webError = "连不上 token 服务，检查手机网络"
+            webError = "连不上服务器了，检查网络"
             webLoading = false
         } else {
             // 明确切主线程：Compose 测试的 continuation interceptor 可能让这里回到 worker 线程
@@ -684,8 +748,25 @@ private fun AppShell(
         syncDshTheme(dark)
     }
 
-    Box(Modifier.fillMaxSize()) {
-    Scaffold(containerColor = pageBackground) { padding ->
+    // 全屏底色渐变：状态栏、导航栏区域也铺同一层底色，不让系统栏和内容区出现色差。
+    Box(Modifier.fillMaxSize().background(appBackgroundBrush())) {
+    // 顶部渐晕从屏幕最顶端开始（含状态栏区域），和下面各页的顶栏连成一片。
+    // 原来由 AicodeTopBar 自己画，但顶栏从状态栏下方开始，两者之间会出现一条色差断层（2026-11-26 用户反馈）。
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(150.dp)
+            .background(
+                androidx.compose.ui.graphics.Brush.verticalGradient(
+                    colors = listOf(
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.13f),
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.035f),
+                        androidx.compose.ui.graphics.Color.Transparent,
+                    ),
+                ),
+            ),
+    )
+    Scaffold(containerColor = androidx.compose.ui.graphics.Color.Transparent) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).imePadding()) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 AnimatedContent(
@@ -694,8 +775,12 @@ private fun AppShell(
                         val fromIdx = AppTabs.indexOfFirst { it.id == initialState }
                         val toIdx = AppTabs.indexOfFirst { it.id == targetState }
                         val dir = if (toIdx >= fromIdx) 1 else -1
-                        (slideInHorizontally(tween(240)) { width -> width * dir / 6 } + fadeIn(tween(200))) togetherWith
-                            (slideOutHorizontally(tween(200)) { width -> -width * dir / 8 } + fadeOut(tween(150)))
+                        (slideInHorizontally(tween(260)) { width -> width * dir / 5 } +
+                            fadeIn(tween(210)) +
+                            scaleIn(tween(260), initialScale = 0.96f)) togetherWith
+                            (slideOutHorizontally(tween(200)) { width -> -width * dir / 8 } +
+                                fadeOut(tween(150)) +
+                                scaleOut(tween(200), targetScale = 0.98f))
                     },
                     label = "page",
                 ) { current ->
@@ -720,6 +805,16 @@ private fun AppShell(
                                 scope.launch { syncDshTheme(value) }
                             },
                             onReconnect = onReconnect,
+                            onNavigate = { page = it },
+                            resetSignal = settingsKey,
+                            followSystem = followSystem,
+                            onFollowSystemChange = onFollowSystemChange,
+                            accent = accent,
+                            onAccentChange = onAccentChange,
+                            fontSize = fontSize,
+                            onFontSizeChange = onFontSizeChange,
+                            density = density,
+                            onDensityChange = onDensityChange,
                         )
                         "fish" -> FishScreen(
                             // 设置页的启用开关关闭时，视为未配置（鱼世界页显示配置提示）
@@ -732,7 +827,13 @@ private fun AppShell(
                     }
                 }
             }
-            PageSwitcherBar(current = page, onSelect = { page = it }, background = pageBackground)
+            // 重复点「我的」= 回到一级列表（在二级页时点底栏能退出去，2026-11-26）
+            PageSwitcherBar(
+                current = page,
+                onSelect = {
+                    if (it == "settings" && page == "settings") settingsKey++ else page = it
+                },
+            )
         }
     }
     val popup = popupView
@@ -740,7 +841,7 @@ private fun AppShell(
         Box(
             Modifier
                 .fillMaxSize()
-                .background(pageBackground)
+                .background(appBackgroundBrush())
                 .imePadding(),
         ) {
             AndroidView(factory = { popup }, modifier = Modifier.fillMaxSize())
@@ -765,61 +866,63 @@ private fun AppShell(
 }
 
 @Composable
-private fun PageSwitcherBar(current: String, onSelect: (String) -> Unit, background: androidx.compose.ui.graphics.Color) {
-    // 底部导航：每个 tab 固定 48x48 点击区（20dp 图标 + 选中时的 10sp 文字），整排居中；
-    // 总高 56dp（内容 48dp，上下各余 4dp）。内容高度固定，切换页面时图标不会上下跳。
-    Box(
+private fun PageSwitcherBar(current: String, onSelect: (String) -> Unit) {
+    // 底部 Dock：离屏边浮起的大圆角胶囊，选中项主题色光晕 + 图标轻微弹跳，（现在两个标签：对话 / 我的）。
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(56.dp)
-            .background(background),
-        contentAlignment = Alignment.Center,
+            .padding(horizontal = 20.dp, vertical = 10.dp)
+            .clip(RoundedCornerShape(26.dp))
+            .background(appCardColor())
+            .border(1.dp, appLineColor(), RoundedCornerShape(26.dp))
+            .padding(horizontal = 6.dp, vertical = 7.dp),
     ) {
-        Row(
-            modifier = Modifier.height(48.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            AppTabs.forEach { item ->
-                val selected = item.id == current
-                val tint by animateColorAsState(
-                    targetValue = if (selected) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                    animationSpec = tween(180),
-                    label = "tabTint",
-                )
-                Column(
-                    modifier = Modifier
-                        .width(48.dp)
-                        .height(48.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .clickable { onSelect(item.id) }
-                        .semantics { contentDescription = "切换到${item.label}页面" },
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center,
-                ) {
+        AppTabs.forEach { item ->
+            val selected = item.id == current
+            val tint by animateColorAsState(
+                targetValue = if (selected) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.66f),
+                animationSpec = tween(180),
+                label = "tabTint",
+            )
+            val pill by animateColorAsState(
+                targetValue = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+                else androidx.compose.ui.graphics.Color.Transparent,
+                animationSpec = tween(200),
+                label = "tabPill",
+            )
+            val iconScale by animateFloatAsState(
+                targetValue = if (selected) 1.12f else 1f,
+                animationSpec = spring(dampingRatio = 0.5f, stiffness = 700f),
+                label = "tabScale",
+            )
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(pill)
+                    .clickable { onSelect(item.id) }
+                    .padding(vertical = 7.dp)
+                    .semantics { contentDescription = "切换到${item.label}页面" },
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Box(Modifier.size(26.dp), contentAlignment = Alignment.Center) {
                     Icon(
                         painter = painterResource(item.icon),
                         contentDescription = null,
                         tint = tint,
-                        modifier = Modifier.size(20.dp),
+                        modifier = Modifier
+                            .size(21.dp)
+                            .scale(iconScale),
                     )
-                    Spacer(Modifier.height(2.dp))
-                    // 文字区高度固定（未选中留白），图标和文字的位置不随选中状态变化
-                    Box(Modifier.height(14.dp), contentAlignment = Alignment.Center) {
-                        if (selected) {
-                            Text(
-                                item.label,
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontSize = 10.sp,
-                                    lineHeight = 11.sp,
-                                ),
-                                color = MaterialTheme.colorScheme.primary,
-                                maxLines = 1,
-                            )
-                        }
-                    }
                 }
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    item.label,
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, lineHeight = 12.sp),
+                    color = tint,
+                    maxLines = 1,
+                )
             }
         }
     }
@@ -841,22 +944,46 @@ private fun WebPage(
         // 冷启动：第一次连上之前先画一个启动页，别让用户对着白屏
         if (!loaded && error == null) {
             Column(
-                Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+                Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.radialGradient(
+                            colors = listOf(
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.17f),
+                                androidx.compose.ui.graphics.Color.Transparent,
+                            ),
+                            center = Offset(0f, 0f),
+                            radius = 1100f,
+                        ),
+                    ),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
+                Box(
+                    Modifier
+                        .size(68.dp)
+                        .clip(RoundedCornerShape(21.dp))
+                        .background(MaterialTheme.colorScheme.primary),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        "A",
+                        style = MaterialTheme.typography.headlineLarge,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                    )
+                }
+                Spacer(Modifier.height(18.dp))
                 Text(
                     "AIcode",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.headlineLarge.copy(letterSpacing = (-0.8).sp),
                 )
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(8.dp))
                 Text(
-                    if (loading) "正在连接引擎…" else "准备中…",
+                    if (loading) "正在连接…" else "正在准备…",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Spacer(Modifier.height(18.dp))
+                Spacer(Modifier.height(22.dp))
                 androidx.compose.material3.LinearProgressIndicator(
                     modifier = Modifier.width(120.dp),
                     color = MaterialTheme.colorScheme.primary,
@@ -866,7 +993,7 @@ private fun WebPage(
         }
         if (error != null) {
             Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
-                EmptyState("网页版没连上", error)
+                EmptyState("连不上，正在重试…", error)
                 androidx.compose.material3.Button(onClick = onRetry) {
                     androidx.compose.material3.Text("重试")
                 }
@@ -894,6 +1021,9 @@ private fun parseCssColor(raw: String): androidx.compose.ui.graphics.Color? {
     val match = Regex("rgba?\\(([^)]+)\\)").find(text) ?: return null
     val parts = match.groupValues[1].split(",").map { it.trim().toFloatOrNull() ?: return null }
     if (parts.size < 3) return null
+    // 背景是渐变的页面，body 的 background-color 是透明的：不能把 rgba(0,0,0,0) 当成黑色，
+    // 否则状态栏/页面底色会被画成纯黑（2026-11-26 实测：枳生主题 body 用渐变后状态栏变黑）。
+    if (parts.size >= 4 && parts[3] <= 0f) return null
     return androidx.compose.ui.graphics.Color(
         parts[0].toInt().coerceIn(0, 255),
         parts[1].toInt().coerceIn(0, 255),

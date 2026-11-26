@@ -65,7 +65,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private class TermTab {
-    var output by mutableStateOf("AIcode 服务器终端\n输入命令后回车运行。\n")
+    var output by mutableStateOf("AIcode · 服务器命令\n输入命令后回车运行。\n")
     var input by mutableStateOf("")
     val history = mutableListOf<String>()
     var histIndex by mutableStateOf(-1)
@@ -122,7 +122,7 @@ fun TerminalScreen(onOpenWeb: () -> Unit = {}) {
     }
 
     Column(Modifier.fillMaxSize()) {
-        AicodeTopBar(title = "终端", subtitle = "服务器 · ${tabs.size} 个标签 · 单条命令") {
+        AicodeTopBar(title = "终端", subtitle = "在服务器上执行命令 · ${tabs.size} 个标签") {
             IconButton(onClick = {
                 tabs.add(TermTab())
                 current = tabs.size - 1
@@ -137,7 +137,7 @@ fun TerminalScreen(onOpenWeb: () -> Unit = {}) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                "交互式终端在网页版：新建会话 →「新建终端」（支持 bash / vim）",
+                "需要完整终端？去网页版新建会话（支持 bash / vim）",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.weight(1f),
@@ -177,7 +177,8 @@ fun TerminalScreen(onOpenWeb: () -> Unit = {}) {
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp)
                 .clip(RoundedCornerShape(16.dp))
-                .background(if (LocalIsDark.current) Color(0xFF070B11) else Color(0xFFF1F4FA))
+                // 终端内容区跟卡片同色（原来硬编码灰白/近黑，跟主题不统一）
+                .background(appCardColor())
                 .border(1.dp, appLineColor(), RoundedCornerShape(16.dp)),
         ) {
             Column(Modifier.fillMaxSize().verticalScroll(scroll).padding(14.dp)) {
@@ -232,7 +233,7 @@ fun TerminalScreen(onOpenWeb: () -> Unit = {}) {
                 modifier = Modifier.weight(1f),
                 placeholder = {
                     Text(
-                        "输入命令…（在服务器上执行单条命令，非交互式）",
+                        "输入命令…（在服务器上执行，一次一条）",
                         style = MaterialTheme.typography.bodySmall,
                         maxLines = 1,
                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
@@ -343,5 +344,5 @@ private fun runRemote(cmd: String): String = try {
         out.trim().ifEmpty { "（无输出）" }
     }
 } catch (e: Exception) {
-    "错误：${e.message}"
+    "出错了：${e.message}"
 }

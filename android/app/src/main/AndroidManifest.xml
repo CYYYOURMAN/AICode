@@ -8,6 +8,10 @@
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- Android 11+ 包可见性：手机控制（stable 包）要能查到并打开测试版 com.aicode.app.beta -->
+    <queries>
+        <package android:name="com.aicode.app.beta" />
+    </queries>
     <application
         android:label="${appName}"
         android:icon="@mipmap/ic_launcher"

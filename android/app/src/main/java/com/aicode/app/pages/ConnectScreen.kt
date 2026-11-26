@@ -1,20 +1,19 @@
 package com.aicode.app.pages
 
 import android.content.Context
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -30,11 +29,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import com.aicode.app.data.ServerConfig
 import com.aicode.app.ui.AicodeCard
+import com.aicode.app.ui.AicodePrimaryButton
 import com.aicode.app.ui.AicodeTheme
 import com.aicode.app.ui.AicodeTopBar
 import kotlinx.coroutines.Dispatchers
@@ -76,53 +78,61 @@ fun ConnectScreen(onConnected: () -> Unit) {
 private fun ConnectForm(ctx: Context, onConnected: () -> Unit) {
     // true = 配对码模式（默认），false = 直接粘密钥（高级入口）
     var pairMode by remember { mutableStateOf(true) }
-    var base by remember { mutableStateOf("") }
-    var code by remember { mutableStateOf("") }
-    var secret by remember { mutableStateOf("") }
+    var base by remember { mutableStateOf(TextFieldValue("")) }
+    var code by remember { mutableStateOf(TextFieldValue("")) }
+    var secret by remember { mutableStateOf(TextFieldValue("")) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
     fun submit() {
         if (busy) return
-        if (base.isBlank()) {
+        if (base.text.isBlank()) {
             error = "请填写服务器地址"
             return
         }
-        if (pairMode && code.isBlank()) {
-            error = "请填写配对码"
+        if (pairMode && code.text.isBlank()) {
+            error = "请填写验证码"
             return
         }
-        if (!pairMode && secret.isBlank()) {
-            error = "请填写密钥"
+        if (!pairMode && secret.text.isBlank()) {
+            error = "请填写访问凭证"
             return
         }
-        val norm = normalizeBase(base)
+        val norm = normalizeBase(base.text)
         if (!pairMode) {
             // 高级入口不联网校验：存下来直接进主界面，连不通会在主界面显示离线。
-            ServerConfig.save(ctx, norm, secret.trim())
+            ServerConfig.save(ctx, norm, secret.text.trim())
             onConnected()
             return
         }
         busy = true
         error = null
         scope.launch {
-            val result = withContext(Dispatchers.IO) { claimPair(norm, code.trim()) }
+            val result = withContext(Dispatchers.IO) { claimPair(norm, code.text.trim()) }
             busy = false
             when (result) {
                 is PairResult.Ok -> {
                     ServerConfig.save(ctx, norm, result.secret)
                     onConnected()
                 }
-                PairResult.BadCode -> error = "配对码错误或已使用"
-                is PairResult.Fail -> error = "连不上服务器：" + result.reason
+                PairResult.BadCode -> {
+                    error = "这个验证码不对，或者已经用过了。回服务器重新取一个。"
+                    base = base.copy(selection = TextRange(0, base.text.length))
+                    code = code.copy(selection = TextRange(0, code.text.length))
+                }
+                is PairResult.Fail -> {
+                    error = "连不上这个地址。检查服务器开着没有、地址有没有写错。"
+                    base = base.copy(selection = TextRange(0, base.text.length))
+                    code = code.copy(selection = TextRange(0, code.text.length))
+                }
             }
         }
     }
 
     Scaffold(containerColor = MaterialTheme.colorScheme.background) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
-            AicodeTopBar(title = "连接服务器", subtitle = "输入网关地址和配对码")
+            AicodeTopBar(title = "连接你的 AI", subtitle = "在你自己的服务器上")
             Column(
                 Modifier
                     .weight(1f)
@@ -131,7 +141,7 @@ private fun ConnectForm(ctx: Context, onConnected: () -> Unit) {
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 16.dp),
             ) {
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(8.dp))
                 AicodeCard {
                     FieldLabel("服务器地址")
                     OutlinedTextField(
@@ -140,119 +150,138 @@ private fun ConnectForm(ctx: Context, onConnected: () -> Unit) {
                         placeholder = { Text("http://<你的服务器IP>:3300") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp),
                         keyboardOptions = KeyboardOptions(
                             keyboardType = KeyboardType.Uri,
                             imeAction = ImeAction.Next,
                         ),
                     )
-                    Spacer(Modifier.height(14.dp))
+                    Spacer(Modifier.height(16.dp))
                     if (pairMode) {
-                        FieldLabel("配对码")
+                        FieldLabel("6 位数字验证码")
                         OutlinedTextField(
                             value = code,
                             onValueChange = { input ->
-                                code = input.filter { it.isDigit() }.take(6)
+                                val digits = input.text.filter { it.isDigit() }.take(6)
+                                // 过滤后长度变了就重建值（保持光标合法），否则保留原样
+                                code = if (digits == input.text) input else TextFieldValue(digits)
                                 error = null
                             },
-                            placeholder = { Text("6 位数字") },
+                            placeholder = { Text("服务器给你的 6 位数字") },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
                             keyboardOptions = KeyboardOptions(
                                 keyboardType = KeyboardType.NumberPassword,
                                 imeAction = ImeAction.Done,
                             ),
                         )
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(10.dp))
                         Text(
-                            "配对码在服务器上：Docker 部署执行 docker compose exec aicode cat /data/pair-code，" +
-                                "自建服务看部署时的数据目录。",
+                            "在哪找？在服务器的部署目录里执行下面这条命令（或者直接问帮你部署的 AI）：\n" +
+                                "docker compose exec aicode cat /data/pair-code",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     } else {
-                        FieldLabel("密钥")
+                        FieldLabel("访问凭证")
                         OutlinedTextField(
                             value = secret,
                             onValueChange = { secret = it; error = null },
-                            placeholder = { Text("服务器上的 token 服务密钥") },
+                            placeholder = { Text("服务器的访问凭证") },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
                             keyboardOptions = KeyboardOptions(
                                 keyboardType = KeyboardType.Password,
                                 imeAction = ImeAction.Done,
                             ),
                         )
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(10.dp))
                         Text(
-                            "密钥在服务器数据目录（/data/secret，或部署时配置）。",
+                            "在服务器的数据目录里（/data/secret），或者问帮你部署的 AI。",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    Spacer(Modifier.height(16.dp))
-                    Button(
+                    Spacer(Modifier.height(20.dp))
+                    AicodePrimaryButton(
+                        text = if (busy) "正在连接…" else "连接",
+                        loading = busy,
                         onClick = { submit() },
-                        enabled = !busy,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        if (busy) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(16.dp),
-                                strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.onPrimary,
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text("连接中…")
-                        } else {
-                            Text("连接")
-                        }
-                    }
+                    )
                     if (error != null) {
-                        Spacer(Modifier.height(10.dp))
+                        Spacer(Modifier.height(12.dp))
                         Text(
                             error!!,
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.error,
                         )
                     }
-                    TextButton(
-                        onClick = {
-                            pairMode = !pairMode
-                            error = null
-                        },
-                        modifier = Modifier.align(Alignment.End),
+                    Spacer(Modifier.height(4.dp))
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
                     ) {
-                        Text(if (pairMode) "我只想输入密钥" else "改用配对码")
-                    }
-                    TextButton(
-                        onClick = {
-                            val cm = ctx.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
-                                as? android.content.ClipboardManager
-                            val raw = cm?.primaryClip?.getItemAt(0)?.text?.toString()?.trim().orEmpty()
-                            if (raw.isEmpty()) {
-                                error = "剪贴板是空的"
-                            } else {
-                                val parts = raw.split("|")
-                                if (parts.size >= 2 && parts[0].trim().startsWith("http") && parts[1].trim().isNotEmpty()) {
-                                    ServerConfig.save(ctx, parts[0].trim(), parts[1].trim())
-                                    onConnected()
+                        TextButton(
+                            onClick = {
+                                pairMode = !pairMode
+                                error = null
+                            },
+                        ) {
+                            Text(
+                                if (pairMode) "我有密钥（高级）" else "改用验证码",
+                                style = MaterialTheme.typography.labelMedium,
+                            )
+                        }
+                        TextButton(
+                            onClick = {
+                                val cm = ctx.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                                    as? android.content.ClipboardManager
+                                val raw = cm?.primaryClip?.getItemAt(0)?.text?.toString()?.trim().orEmpty()
+                                if (raw.isEmpty()) {
+                                    error = "没有可粘贴的内容"
                                 } else {
-                                    error = "连接信息格式不对（应为 服务器地址|密钥）"
+                                    val parts = raw.split("|")
+                                    if (parts.size >= 2 && parts[0].trim().startsWith("http") && parts[1].trim().isNotEmpty()) {
+                                        ServerConfig.save(ctx, parts[0].trim(), parts[1].trim())
+                                        onConnected()
+                                    } else {
+                                        error = "这段内容不对。要复制 AI 给你的整段（http://地址|密钥）。"
+                                    }
                                 }
-                            }
-                        },
-                        modifier = Modifier.align(Alignment.End),
-                    ) {
-                        Text("从剪贴板导入连接")
+                            },
+                        ) {
+                            Text("粘贴连接信息", style = MaterialTheme.typography.labelMedium)
+                        }
                     }
                 }
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(16.dp))
                 Text(
-                    "连接成功后 App 用这份配置向服务器换取访问 token，密钥只保存在本机。",
+                    "连接后凭据只保存在这台手机里。",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 6.dp, bottom = 24.dp),
+                    modifier = Modifier.padding(start = 8.dp),
                 )
+                // 首次引导：没有服务器的人从这里去部署指南（UI-COPY 第6节）
+                TextButton(
+                    onClick = {
+                        runCatching {
+                            val i = android.content.Intent(
+                                android.content.Intent.ACTION_VIEW,
+                                android.net.Uri.parse("https://cyyyourman.github.io/AICode/"),
+                            )
+                            i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                            ctx.startActivity(i)
+                        }
+                    },
+                    modifier = Modifier.padding(start = 2.dp, bottom = 24.dp),
+                ) {
+                    Text(
+                        "还没有服务器？看怎么装",
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
             }
         }
     }
@@ -289,8 +318,10 @@ private val pairClient: OkHttpClient by lazy {
 private fun claimPair(base: String, code: String): PairResult {
     val payload = JSONObject().put("code", code).toString()
         .toRequestBody("application/json; charset=utf-8".toMediaType())
-    val request = Request.Builder().url(base + "/pair/claim").post(payload).build()
     return try {
+        // url 构建也放 try 里：用户把地址写歪（叠字/缺端口）时 OkHttp 抛 IllegalArgumentException，
+        // 在外面会直接崩掉整个协程（2026-11-26 真机踩到）。
+        val request = Request.Builder().url(base + "/pair/claim").post(payload).build()
         pairClient.newCall(request).execute().use { response ->
             val text = response.body?.string().orEmpty()
             when {
@@ -315,9 +346,9 @@ private fun claimPair(base: String, code: String): PairResult {
 }
 
 private fun friendlyError(e: IOException): String = when (e) {
-    is SocketTimeoutException -> "连接超时，检查地址和网络"
-    is UnknownHostException -> "找不到这个地址"
-    is ConnectException -> "连不上，检查端口（默认 3300）"
+    is SocketTimeoutException -> "没响应。确认手机和服务器在同一个网络（或都开了 Tailscale）。"
+    is UnknownHostException -> "找不到这个地址。看看 IP 有没有写错。"
+    is ConnectException -> "连不上。确认地址后面的端口号没漏（默认 3300）。"
     else -> e.message?.takeIf { it.isNotBlank() } ?: "网络错误"
 }
 

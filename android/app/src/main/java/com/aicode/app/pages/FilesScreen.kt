@@ -110,7 +110,7 @@ fun FilesScreen(client: EngineClient?, cookie: String?) {
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null && client != null && cookie != null && scopeId != null) {
             scope.launch {
-                notice = "上传中…"
+                notice = "正在上传…"
                 notice = withContext(Dispatchers.IO) {
                     uploadFile(ctx, client, cookie, scopeId!!, uri)
                 }
@@ -124,7 +124,7 @@ fun FilesScreen(client: EngineClient?, cookie: String?) {
         // 冷启动那一下没换到 cookie 时，页面也不会一直空白。
         if (client == null) {
             loading = false
-            err = "正在连接引擎…"
+            err = "正在连接…"
             return@LaunchedEffect
         }
         val res = withContext(Dispatchers.IO) {
@@ -155,11 +155,11 @@ fun FilesScreen(client: EngineClient?, cookie: String?) {
                 workspaceRoot = pickedCwd
             } else {
                 loading = false
-                err = "没有可用的会话工作区"
+                err = "没找到可用的会话目录"
             }
         } else {
             loading = false
-            err = "读取会话列表失败"
+            err = "读不到会话列表"
         }
     }
 
@@ -179,7 +179,7 @@ fun FilesScreen(client: EngineClient?, cookie: String?) {
         val value = res?.optJSONObject("result")?.optJSONObject("value")
         if (value == null) {
             err = res?.optJSONObject("result")?.optJSONObject("error")?.optString("message")
-                ?: "读取目录失败"
+                ?: "读不到这个目录"
             entries = emptyList()
         } else {
             val arr = value.optJSONArray("entries")
@@ -205,11 +205,11 @@ fun FilesScreen(client: EngineClient?, cookie: String?) {
 
     Column(Modifier.fillMaxSize()) {
         AicodeTopBar(
-            title = "文件",
-            subtitle = if (path == ".") workspaceRoot.ifBlank { "工作区" } else path,
+            title = "服务器上的文件",
+            subtitle = if (path == ".") workspaceRoot.ifBlank { "会话目录" } else path,
         ) {
             IconButton(onClick = { refreshKey++ }) {
-                Icon(Icons.Filled.Refresh, contentDescription = "刷新文件列表")
+                Icon(Icons.Filled.Refresh, contentDescription = "刷新")
             }
             IconButton(onClick = {
                 newDirName = ""
@@ -278,10 +278,10 @@ fun FilesScreen(client: EngineClient?, cookie: String?) {
                     modifier = Modifier.align(Alignment.Center).size(26.dp),
                     strokeWidth = 2.5.dp,
                 )
-                err.isNotEmpty() -> EmptyState("读不到目录", err)
+                err.isNotEmpty() -> EmptyState("读不到这个目录", err)
                 shown.isEmpty() -> EmptyState(
-                    if (query.isBlank()) "这个目录是空的" else "没有匹配的文件",
-                    if (query.isBlank()) "用右上角 + 上传文件" else null,
+                    if (query.isBlank()) "这里还没有文件" else "没有匹配的文件",
+                    if (query.isBlank()) "点右上角 + 可以上传" else null,
                 )
                 else -> LazyColumn(
                     modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
@@ -332,9 +332,9 @@ fun FilesScreen(client: EngineClient?, cookie: String?) {
     fun shellQuote(v: String): String = "'" + v.replace("'", "'\\''") + "'"
 
     fun shellErr(out: String): String = when {
-        out.contains("exec disabled") -> "服务器未启用 exec（部署文档里设 EXEC_ENABLED=1）"
-        out.contains("No such file or directory") -> "路径不存在"
-        out.contains("Permission denied") -> "权限不足"
+        out.contains("exec disabled") -> "服务器没开文件操作（部署时设置 EXEC_ENABLED=1 才行）"
+        out.contains("No such file or directory") -> "路径不存在（可能被删了或改名了）"
+        out.contains("Permission denied") -> "没有权限（服务器上的这个目录不让改）"
         else -> out
     }
 
@@ -355,7 +355,7 @@ fun FilesScreen(client: EngineClient?, cookie: String?) {
         val o = org.json.JSONObject(text)
         Pair(o.optInt("code", -1), o.optString("output", ""))
     } catch (e: Throwable) {
-        Pair(-1, e.message ?: "网络错误")
+        Pair(-1, e.message ?: "网络断了，检查一下连接")
     }
 
     if (creatingDir) {
@@ -539,7 +539,8 @@ private fun FileRow(
         Modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(if (entry.isDir) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f) else appCardColor())
+            // 统一用白卡（和设置页/网页一致）：文件夹靠图标颜色区分，不靠整行变色
+            .background(appCardColor())
             .clickable(onClick = onClick)
             .padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,

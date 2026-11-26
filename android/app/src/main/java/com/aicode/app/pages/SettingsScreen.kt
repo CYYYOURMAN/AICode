@@ -6,6 +6,9 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -76,6 +79,16 @@ fun SettingsScreen(
     onRefresh: () -> Unit,
     onThemeChange: (Boolean) -> Unit,
     onReconnect: () -> Unit = {},
+    onNavigate: (String) -> Unit = {},
+    resetSignal: Int = 0,
+    followSystem: Boolean = false,
+    onFollowSystemChange: (Boolean) -> Unit = {},
+    accent: com.aicode.app.ui.AppAccent = com.aicode.app.ui.AppAccent.Teal,
+    onAccentChange: (com.aicode.app.ui.AppAccent) -> Unit = {},
+    fontSize: com.aicode.app.ui.AppFontSize = com.aicode.app.ui.AppFontSize.Medium,
+    onFontSizeChange: (com.aicode.app.ui.AppFontSize) -> Unit = {},
+    density: com.aicode.app.ui.AppDensity = com.aicode.app.ui.AppDensity.Standard,
+    onDensityChange: (com.aicode.app.ui.AppDensity) -> Unit = {},
 ) {
     val dark = LocalIsDark.current
     val ctx = LocalContext.current
@@ -86,14 +99,15 @@ fun SettingsScreen(
     // （com.aicode.app）的无障碍服务干活，只看本进程 instance 会把它误报成「未开启」。
     var a11yState by remember { mutableStateOf(readA11yState(ctx)) }
     val a11yEnabled = a11yState != A11yState.OFF
+    // 副标题说「能干什么」，徽章说「开没开」——别两处都写「已开启」（2026-11-26 用户反馈重复）
     val a11yDetail = when (a11yState) {
-        A11yState.ON -> "已开启，可以执行全局操作"
-        A11yState.VIA_STABLE -> "已开启（由稳定版 AIcode 提供）"
-        A11yState.OFF -> "未开启，点下面按钮去开启"
+        A11yState.ON -> "可以帮你在别的应用里点按"
+        A11yState.VIA_STABLE -> "可以帮你在别的应用里点按"
+        A11yState.OFF -> "还没开启，点下面打开"
     }
     val a11yBadge = when (a11yState) {
         A11yState.ON -> "运行中"
-        A11yState.VIA_STABLE -> "由稳定版提供"
+        A11yState.VIA_STABLE -> "已开启"
         A11yState.OFF -> "未开启"
     }
     val powerManager = remember {
@@ -120,6 +134,12 @@ fun SettingsScreen(
     var downloading by remember { mutableStateOf(false) }
     var progress by remember { mutableIntStateOf(0) }
     var watchStatus by remember { mutableStateOf("还没开始监听") }
+    // 一级/二级菜单：null = 一级列表，否则是二级页 key（2026-11-26 用户要求分两级）
+    var subPage by remember { mutableStateOf<String?>(null) }
+    // 点底栏「我的」回到一级（MainActivity 传进来，递增即重置）
+    androidx.compose.runtime.LaunchedEffect(resetSignal) { if (resetSignal > 0) subPage = null }
+    // 二级页按系统返回键：先回一级，别一下就跳回对话页
+    androidx.activity.compose.BackHandler(enabled = subPage != null) { subPage = null }
     var repairing by remember { mutableStateOf(false) }
     var repairResult by remember { mutableStateOf<String?>(null) }
     // 服务器配置进页面读一次即可：「重新配对」清掉后会由 MainActivity 切回连接页
@@ -151,68 +171,114 @@ fun SettingsScreen(
     }.getOrDefault(0)
 
     Column(Modifier.fillMaxSize()) {
-        AicodeTopBar(title = "设置", subtitle = "引擎连接 · 外观 · 手机控制")
+        AicodeTopBar(
+            title = when (subPage) {
+                "connect" -> "连接"
+                "appearance" -> "外观"
+                "phone" -> "让 AI 操作手机"
+                "more" -> "更多功能"
+                "advanced" -> "高级"
+                "about" -> "关于"
+                else -> "我的"
+            },
+            subtitle = if (subPage == null) "连接 · 外观 · AI" else null,
+        )
         Column(
             Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp),
         ) {
-            SectionTitle("引擎")
+                        if (subPage == null) {
+                // 一级：只列入口，每行带一句状态
+                SectionTitle("设置")
+                AicodeCard {
+                    SettingRow(
+                        icon = painterResource(R.drawable.ic_tab_settings),
+                        title = "外观",
+                        subtitle = if (dark) "深色" else "浅色",
+                        value = "›",
+                        onClick = { subPage = "appearance" },
+                    )
+                    DividerLine()
+                    SettingRow(
+                        icon = painterResource(R.drawable.ic_tab_fish),
+                        title = "鱼世界",
+                        subtitle = "另一个世界",
+                        value = "›",
+                        onClick = { onNavigate("fish") },
+                    )
+                    DividerLine()
+                    SettingRow(
+                        icon = painterResource(R.drawable.ic_tab_terminal),
+                        title = "更多功能",
+                        subtitle = "终端 · 文件 · 手机控制",
+                        value = "›",
+                        onClick = { subPage = "more" },
+                    )
+                    DividerLine()
+                    SettingRow(
+                        icon = painterResource(R.drawable.ic_tab_control),
+                        title = "高级",
+                        subtitle = if (endpoint != null) "已连接" else "未连接",
+                        value = "›",
+                        onClick = { subPage = "advanced" },
+                    )
+                    DividerLine()
+                    SettingRow(
+                        icon = painterResource(R.drawable.ic_tab_web),
+                        title = "关于",
+                        subtitle = "版本 $currentVersion",
+                        value = "›",
+                        onClick = { subPage = "about" },
+                    )
+                }
+            } else {
+                // 只留箭头：二级页左上角一个 ‹，点了回一级
+                androidx.compose.material3.IconButton(onClick = { subPage = null }) {
+                    Icon(
+                        Icons.Filled.ArrowBack,
+                        contentDescription = "返回",
+                        modifier = Modifier.size(22.dp),
+                    )
+                }
+                when (subPage) {
+                    "connect" -> {
             AicodeCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text("DSH 连接", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                        Text("连接状态", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                        // 地址挪到「高级」里了，这里只留一句人话状态
                         Text(
                             when {
-                                endpoint != null ->
-                                    endpoint.base
-                                engineLoaded -> "未连接"
-                                else -> "正在获取…"
+                                endpoint != null -> "你的 AI 在自己的服务器上运行"
+                                engineLoaded -> "还没连上服务器"
+                                else -> "正在连接…"
                             },
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    StatusBadge(active = endpoint != null, text = if (endpoint != null) "已连接" else "离线")
+                    StatusBadge(active = endpoint != null, text = when { endpoint != null -> "已连接"; engineLoaded -> "未连接"; else -> "正在连接…" })
                 }
                 Spacer(Modifier.height(12.dp))
                 DividerLine()
-                SettingRow(
-                    icon = painterResource(R.drawable.ic_tab_web),
-                    title = "当前 token",
-                    subtitle = if (endpoint != null) "已获取 · 与服务器同步" else "无",
-                )
-                SettingRow(
-                    icon = painterResource(R.drawable.ic_tab_settings),
-                    title = "引擎版本",
-                    subtitle = when {
-                        engineVersion == null -> "未获取"
-                        engineVersion.latest.isNotEmpty() && engineVersion.latest != engineVersion.current ->
-                            "有新版本 ${engineVersion.latest}（服务器更新引擎后重启生效）"
-                        else -> "已是最新"
-                    },
-                    value = engineVersion?.current ?: "—",
-                )
-                SettingRow(
-                    icon = painterResource(R.drawable.ic_tab_terminal),
-                    title = "Node.js",
-                    subtitle = engineVersion?.npm?.takeIf { it.isNotEmpty() }?.let { "npm $it" },
-                    value = engineVersion?.node?.takeIf { it.isNotEmpty() } ?: "—",
-                )
+
                 TextButton(onClick = onRefresh, modifier = Modifier.align(Alignment.End)) {
                     Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text("重新获取 token")
+                    Text("重新同步")
                 }
             }
 
             Spacer(Modifier.height(18.dp))
-            SectionTitle("外观")
+
+                    }
+                    "appearance" -> {
             AicodeCard {
                 SettingRow(
                     icon = painterResource(R.drawable.ic_tab_settings),
-                    title = "深色主题",
+                    title = "深色模式",
                     subtitle = if (dark) "当前：深色" else "当前：浅色",
                     trailing = {
                         Switch(checked = dark, onCheckedChange = onThemeChange)
@@ -222,25 +288,91 @@ fun SettingsScreen(
                 DividerLine()
                 SettingRow(
                     icon = painterResource(R.drawable.ic_tab_web),
-                    title = "网页自动重载",
+                    title = "自动刷新",
                     subtitle = if (reloadMinutes == 0) "关闭（长会话可能变卡）"
-                    else "离开超过 $reloadMinutes 分钟自动重载",
+                    else "离开超过 $reloadMinutes 分钟刷新一次",
                     onClick = { showReloadDialog = true },
+                )
+                Spacer(Modifier.height(12.dp))
+                DividerLine()
+                SettingRow(
+                    icon = painterResource(R.drawable.ic_tab_settings),
+                    title = "跟随系统",
+                    subtitle = if (followSystem) "跟着手机的深浅设置走" else "自己选深浅",
+                    trailing = {
+                        Switch(checked = followSystem, onCheckedChange = onFollowSystemChange)
+                    },
+                )
+                Spacer(Modifier.height(12.dp))
+                DividerLine()
+                Column(Modifier.padding(vertical = 10.dp)) {
+                    Text(
+                        "主题色",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                        com.aicode.app.ui.AppAccent.entries.forEach { a ->
+                            val selected = a == accent
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable { onAccentChange(a) }
+                                    .padding(horizontal = 6.dp, vertical = 6.dp),
+                            ) {
+                                Box(
+                                    Modifier
+                                        .size(38.dp)
+                                        .clip(CircleShape)
+                                        .background(com.aicode.app.ui.accentColor(a, dark))
+                                        .border(
+                                            width = if (selected) 3.dp else 0.dp,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            shape = CircleShape,
+                                        ),
+                                )
+                                Spacer(Modifier.height(6.dp))
+                                Text(
+                                    a.label,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (selected) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(4.dp))
+                DividerLine()
+                ChoiceRow(
+                    title = "字号",
+                    options = com.aicode.app.ui.AppFontSize.entries.map { it.key to it.label },
+                    selected = fontSize.key,
+                    onSelect = { k -> onFontSizeChange(com.aicode.app.ui.AppFontSize.of(k)) },
+                )
+                DividerLine()
+                ChoiceRow(
+                    title = "密度",
+                    options = com.aicode.app.ui.AppDensity.entries.map { it.key to it.label },
+                    selected = density.key,
+                    onSelect = { k -> onDensityChange(com.aicode.app.ui.AppDensity.of(k)) },
                 )
             }
             if (showReloadDialog) {
                 AlertDialog(
                     onDismissRequest = { showReloadDialog = false },
-                    title = { Text("网页自动重载") },
+                    title = { Text("自动刷新") },
                     text = {
                         Column {
                             Text(
-                                "离开网页超过所选时间再回来，会自动重载一次，清掉累积的页面内容（长会话更流畅）。",
+                                "离开太久再回来会刷新一次，长对话更流畅。",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             Spacer(Modifier.height(8.dp))
-                            listOf(5 to "5 分钟", 10 to "10 分钟（默认）", 30 to "30 分钟", 0 to "关闭").forEach { (m, label) ->
+                            listOf(5 to "5 分钟", 10 to "10 分钟（默认）", 30 to "30 分钟", 0 to "不自动刷新").forEach { (m, label) ->
                                 Text(
                                     label,
                                     style = MaterialTheme.typography.bodyMedium,
@@ -263,11 +395,13 @@ fun SettingsScreen(
             }
 
             Spacer(Modifier.height(18.dp))
-            SectionTitle("手机控制")
+
+                    }
+                    "phone" -> {
             AicodeCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text("无障碍服务", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                        Text("操作权限", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                         Text(
                             a11yDetail,
                             style = MaterialTheme.typography.labelSmall,
@@ -288,7 +422,7 @@ fun SettingsScreen(
                         },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Text("打开无障碍设置")
+                        Text("去开启")
                     }
                     TextButton(
                         onClick = {
@@ -320,20 +454,13 @@ fun SettingsScreen(
                             modifier = Modifier.padding(start = 6.dp, end = 6.dp, top = 2.dp),
                         )
                     }
-                } else {
-                    Spacer(Modifier.height(14.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        ControlAction("返回", Icons.Filled.ArrowBack, Modifier.weight(1f)) { ControlService.back() }
-                        ControlAction("主页", Icons.Filled.Home, Modifier.weight(1f)) { ControlService.home() }
-                        ControlAction("最近任务", Icons.Filled.List, Modifier.weight(1f)) { ControlService.recents() }
-                    }
                 }
                 Spacer(Modifier.height(12.dp))
                 DividerLine()
                 SettingRow(
                     icon = painterResource(R.drawable.ic_tab_settings),
-                    title = "操控状态提示",
-                    subtitle = if (overlayOk) "操控时屏幕顶部显示「AI 操作中」" else "需要「显示在其他应用上层」权限",
+                    title = "显示操作提示",
+                    subtitle = if (overlayOk) "AI 操作时屏幕顶部显示提示条" else "需要「显示在其他应用上层」权限",
                     value = if (overlayOk) "已开启" else "未开启",
                 )
                 if (!overlayOk) {
@@ -346,16 +473,16 @@ fun SettingsScreen(
                             )
                         },
                     ) {
-                        Text("打开悬浮窗设置")
+                        Text("去开启")
                     }
                 }
                 Spacer(Modifier.height(12.dp))
                 DividerLine()
                 SettingRow(
                     icon = painterResource(R.drawable.ic_tab_settings),
-                    title = "后台不被清理",
-                    subtitle = if (batteryUnrestricted) "已允许后台运行，手机控制更稳"
-                    else "系统省电可能清理后台，手机控制会断",
+                    title = "后台保持运行",
+                    subtitle = if (batteryUnrestricted) "已允许，AI 操作更稳"
+                    else "系统省电可能清掉后台，AI 会连不上",
                     value = if (batteryUnrestricted) "已允许" else "未允许",
                 )
                 if (!batteryUnrestricted) {
@@ -378,15 +505,15 @@ fun SettingsScreen(
                             }
                         },
                     ) {
-                        Text("允许后台运行")
+                        Text("保持后台运行")
                     }
                 }
                 Spacer(Modifier.height(12.dp))
                 DividerLine()
                 SettingRow(
                     icon = painterResource(R.drawable.ic_tab_files),
-                    title = "回合完成通知",
-                    subtitle = watchStatus,
+                    title = "完成时通知我",
+                    subtitle = "有新回合完成时提醒你",
                     onClick = {
                         runCatching {
                             ctx.startActivity(
@@ -400,27 +527,79 @@ fun SettingsScreen(
             }
 
             Spacer(Modifier.height(18.dp))
-            SectionTitle("服务器")
+            // 底部只留「对话 / 我的」两个标签，终端、文件、鱼世界从这里进
+
+                    }
+                    "more" -> {
+            AicodeCard {
+                SettingRow(
+                    icon = painterResource(R.drawable.ic_tab_terminal),
+                    title = "终端",
+                    subtitle = "在服务器上执行命令",
+                    onClick = { onNavigate("terminal") },
+                )
+                DividerLine()
+                SettingRow(
+                    icon = painterResource(R.drawable.ic_tab_files),
+                    title = "文件",
+                    subtitle = "看服务器上的文件",
+                    onClick = { onNavigate("files") },
+                )
+                DividerLine()
+                SettingRow(
+                    icon = painterResource(R.drawable.ic_tab_control),
+                    title = "让 AI 操作手机",
+                    subtitle = if (a11yEnabled) "已开启" else "未开启",
+                    onClick = { subPage = "phone" },
+                )
+            }
+
+                    }
+                    "advanced" -> {
             AicodeCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text("网关地址", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                        Text("服务器地址", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                         Text(
-                            if (serverBase.isNotEmpty()) serverBase else "未配置",
+                            if (serverBase.isNotEmpty()) serverBase else "未连接",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                     StatusBadge(
                         active = serverBase.isNotEmpty(),
-                        text = if (serverBase.isNotEmpty()) "已配置" else "未配置",
+                        text = if (serverBase.isNotEmpty()) "已连接" else "未连接",
                     )
                 }
+                Text(
+                    "App 的入口：配对、发访问凭证、手机控制、检查更新都走这里。",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(10.dp))
+                DividerLine()
+                Spacer(Modifier.height(10.dp))
+                // AI 引擎地址：故意和网关地址分开列，各带一句说明，避免「两个网址不知道是干嘛的」
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("AI 引擎地址", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            endpoint?.base ?: "未获取",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                Text(
+                    "真正跑 AI 的地方：聊天页面连的是这个地址。",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 Spacer(Modifier.height(10.dp))
                 DividerLine()
                 Spacer(Modifier.height(10.dp))
                 Text(
-                    "密钥只保存在本机，不会在这里显示。",
+                    "访问凭证只保存在本机，不会在这里显示。",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -432,7 +611,7 @@ fun SettingsScreen(
                 ) {
                     Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text("重新配对")
+                    Text("重新连接")
                 }
                 TextButton(
                     onClick = {
@@ -441,15 +620,35 @@ fun SettingsScreen(
                         val text = ServerConfig.base(ctx) + "|" + ServerConfig.secret(ctx)
                         cm?.setPrimaryClip(android.content.ClipData.newPlainText("aicode-connect", text))
                         android.widget.Toast.makeText(
-                            ctx, "已复制连接信息（含密钥，别发给别人）", android.widget.Toast.LENGTH_SHORT,
+                            ctx, "已复制连接信息（含访问凭证，别发给别人）", android.widget.Toast.LENGTH_SHORT,
                         ).show()
                     },
                 ) {
                     Text("复制连接信息")
                 }
+                Spacer(Modifier.height(10.dp))
+                DividerLine()
+                Spacer(Modifier.height(6.dp))
+                SettingRow(
+                    icon = painterResource(R.drawable.ic_tab_settings),
+                    title = "AI 版本",
+                    subtitle = when {
+                        engineVersion == null -> "未获取"
+                        engineVersion.latest.isNotEmpty() && engineVersion.latest != engineVersion.current ->
+                            "服务器上有新版本 ${engineVersion.latest}，重启后生效"
+                        else -> "已是最新"
+                    },
+                    value = engineVersion?.current ?: "—",
+                )
+                SettingRow(
+                    icon = painterResource(R.drawable.ic_tab_terminal),
+                    title = "运行环境",
+                    value = engineVersion?.node?.takeIf { it.isNotEmpty() } ?: "—",
+                )
             }
 
             Spacer(Modifier.height(18.dp))
+
             SectionTitle("MCP")
             AicodeCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -492,12 +691,14 @@ fun SettingsScreen(
             }
 
             Spacer(Modifier.height(18.dp))
-            SectionTitle("关于")
+
+                    }
+                    "about" -> {
             AicodeCard {
                 SettingRow(
                     icon = painterResource(R.drawable.ic_tab_terminal),
                     title = "AIcode",
-                    subtitle = "Compose 重写版",
+                    subtitle = "手机版",
                     value = currentVersion,
                 )
                 DividerLine()
@@ -561,13 +762,20 @@ fun SettingsScreen(
                 }
             }
 
+
+                    }
+                }
+            }
+
+            if (subPage == null || subPage == "connect" || subPage == "advanced") {
             Spacer(Modifier.height(24.dp))
             Text(
-                "Token 由本地 token 服务下发；服务器地址和密钥在上面的「服务器」区块里修改。",
+                "访问凭证由服务器下发；服务器地址在「高级」里改。",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = 6.dp, bottom = 24.dp),
+                modifier = Modifier.padding(start = 6.dp, bottom = 100.dp),
             )
+            }
         }
     }
 
@@ -669,5 +877,42 @@ private fun readA11yState(ctx: Context): A11yState {
         enabled.contains(own) -> A11yState.ON
         enabled.contains(stable) -> A11yState.VIA_STABLE
         else -> A11yState.OFF
+    }
+}
+
+/** 外观页的小横排选择器：一组胶囊按钮，选中一个立刻生效。 */
+@Composable
+private fun ChoiceRow(
+    title: String,
+    options: List<Pair<String, String>>,
+    selected: String,
+    onSelect: (String) -> Unit,
+) {
+    Column(Modifier.padding(vertical = 10.dp)) {
+        Text(
+            title,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            options.forEach { (key, label) ->
+                val on = key == selected
+                Text(
+                    label,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = if (on) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(
+                            if (on) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                            else MaterialTheme.colorScheme.surfaceVariant,
+                        )
+                        .clickable { onSelect(key) }
+                        .padding(horizontal = 18.dp, vertical = 8.dp),
+                )
+            }
+        }
     }
 }

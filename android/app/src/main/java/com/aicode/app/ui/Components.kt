@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,40 +14,58 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * 页面顶栏：大标题 + 可选副标题 + 右侧操作。
+ * 顶部垫一层主题色竖向渐晕，像从 App 品牌色里「透出来」的光，比纯透明底更有层次。
+ */
 @Composable
 fun AicodeTopBar(
     title: String,
     subtitle: String? = null,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
-    TopAppBar(
-        title = {
-            Column {
+    // 渐晕统一由 AppShell 在屏幕最外层画（从状态栏顶部开始），这里不再自己铺，
+    // 否则状态栏区域没有渐晕、和顶栏之间会出现一条色差断层（2026-11-26 实测）。
+    Box(
+        modifier = Modifier
+            .fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 20.dp, end = 10.dp, top = 16.dp, bottom = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
                 Text(
                     title,
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 if (!subtitle.isNullOrEmpty()) {
+                    Spacer(Modifier.height(3.dp))
                     Text(
                         subtitle,
                         style = MaterialTheme.typography.labelSmall,
@@ -58,20 +75,19 @@ fun AicodeTopBar(
                     )
                 }
             }
-        },
-        actions = actions,
-        windowInsets = WindowInsets(0, 0, 0, 0),
-        colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
-    )
+            Row(verticalAlignment = Alignment.CenterVertically, content = actions)
+        }
+    }
 }
 
+/** 统一卡片：20dp 圆角 + 1dp 描边 + 18dp 内边距；可选整卡点击。 */
 @Composable
 fun AicodeCard(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val shape = RoundedCornerShape(18.dp)
+    val shape = RoundedCornerShape(20.dp)
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -79,21 +95,38 @@ fun AicodeCard(
             .background(appCardColor())
             .border(1.dp, appLineColor(), shape)
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-            .padding(16.dp),
+            .padding(horizontal = 18.dp, vertical = 16.dp),
         content = content,
     )
 }
 
+/** 分组小标题：全大写字距拉开，弱化存在感但能分区。 */
 @Composable
 fun SectionTitle(text: String, modifier: Modifier = Modifier) {
     Text(
         text,
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = modifier.padding(start = 6.dp, top = 4.dp, bottom = 8.dp),
+        style = MaterialTheme.typography.labelSmall.copy(
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 1.2.sp,
+        ),
+        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.9f),
+        modifier = modifier.padding(start = 8.dp, top = 16.dp, bottom = 8.dp),
     )
 }
 
+/** 卡片内的细分隔线。 */
+@Composable
+fun AicodeDivider(modifier: Modifier = Modifier) {
+    Box(
+        modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp)
+            .height(1.dp)
+            .background(appLineColor()),
+    )
+}
+
+/** 设置行：图标方块 + 标题/副标题 + 右侧值或控件。 */
 @Composable
 fun SettingRow(
     icon: Painter? = null,
@@ -107,24 +140,34 @@ fun SettingRow(
         modifier = Modifier
             .fillMaxWidth()
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-            .padding(vertical = 10.dp),
+            .padding(vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (icon != null) {
             Box(
                 Modifier
-                    .size(34.dp)
-                    .clip(RoundedCornerShape(11.dp))
+                    .size(38.dp)
+                    .clip(RoundedCornerShape(12.dp))
                     .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.13f)),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(19.dp),
+                )
             }
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(13.dp))
         }
         Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+            Text(
+                title,
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                color = MaterialTheme.colorScheme.onSurface,
+            )
             if (!subtitle.isNullOrEmpty()) {
+                Spacer(Modifier.height(1.dp))
                 Text(
                     subtitle,
                     style = MaterialTheme.typography.labelSmall,
@@ -150,20 +193,78 @@ fun SettingRow(
     }
 }
 
+/** 状态胶囊：小圆点 + 文字，用于「已连接」「运行中」「已获取」这类状态。 */
 @Composable
-fun StatusBadge(active: Boolean, text: String) {
-    val color = if (active) AppColors.Teal else AppColors.Red
+fun StatusPill(
+    text: String,
+    color: Color = MaterialTheme.colorScheme.secondary,
+    modifier: Modifier = Modifier,
+) {
     Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(999.dp))
-            .background(color.copy(alpha = 0.14f))
-            .padding(horizontal = 10.dp, vertical = 5.dp),
+        modifier = modifier
+            .clip(CircleShape)
+            .background(color.copy(alpha = 0.13f))
+            .padding(horizontal = 11.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(7.dp).clip(RoundedCornerShape(999.dp)).background(color))
-        Spacer(Modifier.width(7.dp))
-        Text(text, style = MaterialTheme.typography.labelSmall, color = color)
+        Box(
+            Modifier
+                .size(6.dp)
+                .clip(CircleShape)
+                .background(color),
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text,
+            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
+            color = color,
+            maxLines = 1,
+        )
     }
+}
+
+/** 主按钮：全宽胶囊，可带 loading。 */
+@Composable
+fun AicodePrimaryButton(
+    text: String,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    loading: Boolean = false,
+    onClick: () -> Unit,
+) {
+    Button(
+        onClick = onClick,
+        enabled = enabled && !loading,
+        modifier = modifier
+            .fillMaxWidth()
+            .height(52.dp),
+        shape = RoundedCornerShape(26.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+        ),
+    ) {
+        if (loading) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(16.dp),
+                strokeWidth = 2.dp,
+                color = MaterialTheme.colorScheme.onPrimary,
+            )
+            Spacer(Modifier.width(9.dp))
+            Text(text, style = MaterialTheme.typography.labelLarge)
+        } else {
+            Text(text, style = MaterialTheme.typography.labelLarge)
+        }
+    }
+}
+
+/** 状态徽章（保留旧签名，内部换成统一胶囊样式）。 */
+@Composable
+fun StatusBadge(active: Boolean, text: String) {
+    StatusPill(
+        text = text,
+        color = if (active) AppColors.Teal else AppColors.Red,
+    )
 }
 
 @Composable
@@ -171,19 +272,27 @@ fun DividerLine(modifier: Modifier = Modifier) {
     Box(modifier.fillMaxWidth().height(1.dp).background(appLineColor()))
 }
 
+/** 空状态/错误页的统一样式。 */
 @Composable
 fun EmptyState(title: String, hint: String? = null, modifier: Modifier = Modifier) {
     Column(
-        modifier = modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 40.dp),
+        modifier
+            .fillMaxWidth()
+            .padding(horizontal = 32.dp, vertical = 44.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(title, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            title,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
         if (!hint.isNullOrEmpty()) {
+            Spacer(Modifier.height(8.dp))
             Text(
                 hint,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
-                modifier = Modifier.padding(top = 6.dp),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             )
         }
     }
@@ -192,18 +301,21 @@ fun EmptyState(title: String, hint: String? = null, modifier: Modifier = Modifie
 @Composable
 fun LoadingState(text: String = "加载中…", modifier: Modifier = Modifier) {
     Column(
-        modifier = modifier.fillMaxWidth().padding(vertical = 40.dp),
+        modifier
+            .fillMaxWidth()
+            .padding(vertical = 44.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        androidx.compose.material3.CircularProgressIndicator(
+        CircularProgressIndicator(
             modifier = Modifier.size(26.dp),
             strokeWidth = 2.5.dp,
+            color = MaterialTheme.colorScheme.primary,
         )
+        Spacer(Modifier.height(12.dp))
         Text(
             text,
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 12.dp),
         )
     }
 }
