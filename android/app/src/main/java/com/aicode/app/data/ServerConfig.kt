@@ -17,6 +17,7 @@ import android.content.Context
 object ServerConfig {
     private const val PREFS = "aicode-server"
     private const val KEY_BASE = "base"
+    private const val KEY_BASE_ALT = "base_alt"
     private const val KEY_SECRET = "secret"
     private const val KEY_MCP_URL = "mcp_url"
     private const val KEY_MCP_TOKEN = "mcp_token"
@@ -36,6 +37,16 @@ object ServerConfig {
 
     /** 配对得到的共享密钥；未配置返回 ""。 */
     fun secret(ctx: Context): String = prefs(ctx).getString(KEY_SECRET, "") ?: ""
+
+    /**
+     * 备用地址（可选）：主地址连不上时用它。
+     * 典型配置是「主 = 局域网（在家快）、备用 = Tailscale（在外面）」。
+     */
+    fun baseAlt(ctx: Context): String = prefs(ctx).getString(KEY_BASE_ALT, "") ?: ""
+
+    fun saveAlt(ctx: Context, url: String) {
+        prefs(ctx).edit().putString(KEY_BASE_ALT, url.trim()).apply()
+    }
 
     fun save(ctx: Context, base: String, secret: String) {
         prefs(ctx).edit()

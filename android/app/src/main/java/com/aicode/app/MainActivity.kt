@@ -115,9 +115,17 @@ class MainActivity : ComponentActivity() {
         var isForeground = false
     }
 
+    /**
+     * 每次回到前台 +1：网页主题是服务端全局设置（正式版/测试版/PC 共用一份），
+     * 谁最后同步谁说了算——回到前台的包必须把自己的深浅重新写上去，否则会被后台那个包顶掉
+     * （2026-11-26 实遇：App 深色、网页被写成浅色，黑字压黑底看不见）。
+     */
+    private val resumeTick = androidx.compose.runtime.mutableIntStateOf(0)
+
     override fun onResume() {
         super.onResume()
         isForeground = true
+        resumeTick.intValue += 1
     }
 
     override fun onPause() {
@@ -211,6 +219,7 @@ class MainActivity : ComponentActivity() {
             }
             val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
             val effectiveDark = if (followSystem) systemDark else dark
+            val resumeTickNow = resumeTick.intValue
             // 还没配置服务器（首次安装，或设置页点了「重新配对」）时先走连接向导；
             // 配置好之后才进主界面，AppShell 的 LaunchedEffect 会自动重新 loadEngine。
             var configured by remember { mutableStateOf(ServerConfig.isConfigured(applicationContext)) }
@@ -242,6 +251,7 @@ class MainActivity : ComponentActivity() {
                             accent = v
                             prefs.edit().putString("accent", v.key).apply()
                         },
+                        resumeTick = resumeTickNow,
                         fontSize = fontSize,
                         onFontSizeChange = { v ->
                             fontSize = v
@@ -295,6 +305,7 @@ private fun AppShell(
     onFollowSystemChange: (Boolean) -> Unit = {},
     accent: com.aicode.app.ui.AppAccent = com.aicode.app.ui.AppAccent.Teal,
     onAccentChange: (com.aicode.app.ui.AppAccent) -> Unit = {},
+    resumeTick: Int = 0,
     fontSize: com.aicode.app.ui.AppFontSize = com.aicode.app.ui.AppFontSize.Medium,
     onFontSizeChange: (com.aicode.app.ui.AppFontSize) -> Unit = {},
     density: com.aicode.app.ui.AppDensity = com.aicode.app.ui.AppDensity.Standard,
@@ -750,7 +761,7 @@ private fun AppShell(
     // 网页主题（服务端 ui-theme）要跟 App 深浅走：以前只在启动时同步一次，且引擎还没连上就直接跳过，
     // 于是「App 浅色 + 网页深色」会一直卡着（2026-11-26 用户看到深色输入框漂在浅色页面里）。
     // 这里按 dark 变化触发，先等 cookie 到位再发；切深浅/跟随系统都走这里。
-    LaunchedEffect(dark) {
+    LaunchedEffect(dark, resumeTick) {
         var waited = 0
         while ((client == null || cookie == null) && waited < 80) {
             kotlinx.coroutines.delay(250)

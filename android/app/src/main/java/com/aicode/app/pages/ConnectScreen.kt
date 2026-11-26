@@ -79,6 +79,7 @@ private fun ConnectForm(ctx: Context, onConnected: () -> Unit) {
     // true = 配对码模式（默认），false = 直接粘密钥（高级入口）
     var pairMode by remember { mutableStateOf(true) }
     var base by remember { mutableStateOf(TextFieldValue("")) }
+    var altBase by remember { mutableStateOf(TextFieldValue(ServerConfig.baseAlt(ctx))) }
     var code by remember { mutableStateOf(TextFieldValue("")) }
     var secret by remember { mutableStateOf(TextFieldValue("")) }
     var busy by remember { mutableStateOf(false) }
@@ -103,6 +104,7 @@ private fun ConnectForm(ctx: Context, onConnected: () -> Unit) {
         if (!pairMode) {
             // 高级入口不联网校验：存下来直接进主界面，连不通会在主界面显示离线。
             ServerConfig.save(ctx, norm, secret.text.trim())
+            ServerConfig.saveAlt(ctx, normalizeBase(altBase.text))
             onConnected()
             return
         }
@@ -114,6 +116,7 @@ private fun ConnectForm(ctx: Context, onConnected: () -> Unit) {
             when (result) {
                 is PairResult.Ok -> {
                     ServerConfig.save(ctx, norm, result.secret)
+                    ServerConfig.saveAlt(ctx, normalizeBase(altBase.text))
                     onConnected()
                 }
                 PairResult.BadCode -> {
@@ -155,6 +158,27 @@ private fun ConnectForm(ctx: Context, onConnected: () -> Unit) {
                             keyboardType = KeyboardType.Uri,
                             imeAction = ImeAction.Next,
                         ),
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    FieldLabel("备用地址（可选）")
+                    OutlinedTextField(
+                        value = altBase,
+                        onValueChange = { altBase = it; error = null },
+                        placeholder = { Text("主地址连不上时用，比如 http://100.x.x.x:3300") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp),
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Uri,
+                            imeAction = ImeAction.Next,
+                        ),
+                    )
+                    Text(
+                        "填两个地址时，App 会自己探测：主地址通就用主地址，不通自动换备用。" +
+                            "常见配法是「主=家里局域网，备用=Tailscale」。",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 6.dp),
                     )
                     Spacer(Modifier.height(16.dp))
                     if (pairMode) {
@@ -245,6 +269,7 @@ private fun ConnectForm(ctx: Context, onConnected: () -> Unit) {
                                     val parts = raw.split("|")
                                     if (parts.size >= 2 && parts[0].trim().startsWith("http") && parts[1].trim().isNotEmpty()) {
                                         ServerConfig.save(ctx, parts[0].trim(), parts[1].trim())
+                                        ServerConfig.saveAlt(ctx, normalizeBase(altBase.text))
                                         onConnected()
                                     } else {
                                         error = "这段内容不对。要复制 AI 给你的整段（http://地址|密钥）。"
