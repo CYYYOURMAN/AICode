@@ -146,16 +146,39 @@ http://<服务器局域网 IP>:$GATEWAY_PORT/health
 
 ## 6. 交付给主人
 
+### 6.1 先装 App（必做）
+
+App 下载（Android 8.0+，已签名，可直接安装），给两个链接：
+- 首选 raw 直链（国内一般能下）：`https://raw.githubusercontent.com/CYYYOURMAN/AICode/main/download/aicode-latest.apk`
+- 备用 GitHub Release：`https://github.com/CYYYOURMAN/AICode/releases/latest/download/aicode-latest.apk`
+（实测 GitHub Release 在国内网络常整段超时，raw 也不通时再试 Release；Release 里另有 unsigned 的 CI 构建，只给开发者自己签名用）
+
+### 6.2 最快的连接方式：一段可粘贴的连接信息
+
+App 连接页有个「**从剪贴板导入连接**」，粘一段就能连上，不用手打地址、也不用配对码。
+格式是 `地址|密钥`（中间一个竖线）。取密钥和端口拼出来：
+
+```bash
+cd "$DEST"
+GATEWAY_PORT=$(grep -E '^GATEWAY_PORT=' .env | cut -d= -f2); GATEWAY_PORT=${GATEWAY_PORT:-3300}
+SECRET=$(docker compose exec -T aicode cat /data/secret | tr -d '[:space:]')
+IP=<服务器局域网 IP；手机走 Tailscale 时填 100.x.y.z>
+echo "http://$IP:$GATEWAY_PORT|$SECRET"
+```
+
+把输出的**那一行原样**发给主人，并提醒他：**这段里有密钥，别发给别人**。
+主人在手机上复制它 → App 连接页点「从剪贴板导入连接」→ 就直接连上了。
+
+用这种方式交付时，**不用**再取配对码（6.3 才需要）。
+
+### 6.3 备选：地址 + 配对码（主人想手动填时）
+
 > 配对码是**一次性**的：第 5 节验证时已经用掉一个了。交付前务必按 5 节末尾的命令**重新取一次**，
 > 且取完之后不要再拿它去 claim 或配对（否则这个码又在主人手里失效）。
 
-告诉主人这三样：
+给主人这两样：
 1. 服务器地址：`http://<服务器局域网 IP>:$GATEWAY_PORT`（手机走 Tailscale 时换成 Tailscale IP）
 2. 配对码：`<6 位数字>`
-3. App 下载（已签名，可直接安装），给两个链接：
-   - 首选 raw 直链（国内一般能下）：`https://raw.githubusercontent.com/CYYYOURMAN/AICode/main/download/aicode-latest.apk`
-   - 备用 GitHub Release：`https://github.com/CYYYOURMAN/AICode/releases/latest/download/aicode-latest.apk`
-   （实测 GitHub Release 在国内网络常整段超时，raw 也不通时再试 Release；Release 里另有 unsigned 的 CI 构建，只给开发者自己签名用）
 
 手机和服务器要在同一网络：同一局域网，或者**两边都连** Tailscale。
 App 连的是**网关端口**（`$GATEWAY_PORT`）；引擎端口（`$DSH_PORT`）必须监听手机能访问到的地址

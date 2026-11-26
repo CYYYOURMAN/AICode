@@ -25,6 +25,7 @@ cat > "$TMP/README-DEPLOY.md" <<'MD'
 - `preflight.sh`：部署前体检（只读）——建好 `.env` 后跑 `bash preflight.sh`，有 FAIL 先修
 - 启动：`docker compose up -d --build`
 - 配对码：`docker compose exec -T aicode cat /data/pair-code`（一次性，交付前重新取）
+- 交付主人：优先给一段 `http://<IP>:<网关端口>|<密钥>`（`cat /data/secret` 取），App 连接页「从剪贴板导入连接」直接粘
 - 详细步骤见站点上的 deploy-for-ai.md
 MD
 
