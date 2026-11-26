@@ -11,7 +11,7 @@ OUT=pages/aicode-deploy.tar.gz
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 
-cp docker-compose.yml .env.example "$TMP/"
+cp docker-compose.yml docker-compose.windows.yml .env.example "$TMP/"
 cp -a gateway "$TMP/gateway"
 rm -rf "$TMP/gateway/__pycache__"
 cp packaging/preflight.sh "$TMP/preflight.sh"
@@ -20,10 +20,11 @@ chmod +x "$TMP/preflight.sh" "$TMP/gateway/entrypoint.sh"
 cat > "$TMP/README-DEPLOY.md" <<'MD'
 # AIcode 部署包
 
-- `docker-compose.yml` + `.env.example`：先 `cp .env.example .env` 再填 `DEEPSEEK_API_KEY`
+- `docker-compose.yml`（Linux/NAS，host 网络）+ `docker-compose.windows.yml`（Windows/Docker Desktop，bridge + 端口映射）
+   + `.env.example`：先 `cp .env.example .env` 再填 `DEEPSEEK_API_KEY`
 - `gateway/`：网关（鉴权/配对/手机控制/更新通道）
 - `preflight.sh`：部署前体检（只读）——建好 `.env` 后跑 `bash preflight.sh`，有 FAIL 先修
-- 启动：`docker compose up -d --build`
+- 启动：Linux `docker compose up -d --build`；Windows `docker compose -f docker-compose.windows.yml up -d --build`
 - 配对码：`docker compose exec -T aicode cat /data/pair-code`（一次性，交付前重新取）
 - 交付主人：优先给一段 `http://<IP>:<网关端口>|<密钥>`（`cat /data/secret` 取），App 连接页「从剪贴板导入连接」直接粘
 - 详细步骤见站点上的 deploy-for-ai.md
@@ -31,7 +32,7 @@ MD
 
 # 固定时间/属主/顺序：内容没变时 tar 字节不变，避免每次打包产生无意义 diff
 tar --sort=name --mtime='2026-01-01 00:00:00Z' --owner=0 --group=0 --numeric-owner \
-    -czf "$OUT" -C "$TMP" README-DEPLOY.md docker-compose.yml .env.example gateway preflight.sh
+    -czf "$OUT" -C "$TMP" README-DEPLOY.md docker-compose.yml docker-compose.windows.yml .env.example gateway preflight.sh
 
 echo "已生成 $OUT（$(du -h "$OUT" | cut -f1)）"
 tar tzf "$OUT"

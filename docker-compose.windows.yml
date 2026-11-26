@@ -1,0 +1,35 @@
+# AIcode —— Windows（Docker Desktop）用的 compose 文件
+#
+#   docker compose -f docker-compose.windows.yml up -d --build
+#
+# 为什么不和 Linux 用同一个文件：Linux 版用 host 网络（DSH 绑定宿主 IP 最省事），
+# 但 **Docker Desktop（Windows/macOS）不支持 host 网络**。这里改成 bridge + 端口映射：
+#   - 容器内 DSH 监听容器自己的 IP（172.x），外面通过 ports 映射出去；
+#   - App 连的是「宿主机 IP:端口」，不依赖容器 IP（网关按请求 Host 推断引擎地址）；
+#   - Windows 上 Docker Desktop 的 NAT 出网正常，不需要额外的防火墙放行（Linux 的 ufw 则要放行 docker 网桥）。
+#
+# Linux / NAS 请用 docker-compose.yml（host 网络）。
+services:
+  aicode:
+    build:
+      context: ./gateway
+    restart: unless-stopped
+    ports:
+      - "${GATEWAY_PORT:-3300}:${GATEWAY_PORT:-3300}"
+      - "${DSH_PORT:-3080}:${DSH_PORT:-3080}"
+    environment:
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      GATEWAY_PORT: ${GATEWAY_PORT:-3300}
+      DSH_PORT: ${DSH_PORT:-3080}
+      DSH_HOST: ${DSH_HOST:-}
+      GATEWAY_SECRET: ${GATEWAY_SECRET:-}
+      PHONE_ENABLED: ${PHONE_ENABLED:-1}
+      EXEC_ENABLED: ${EXEC_ENABLED:-0}
+      DSH_BASE: ${DSH_BASE:-}
+    volumes:
+      - aicode_dsh_home:/root/.dsh
+      - aicode_data:/data
+
+volumes:
+  aicode_dsh_home:
+  aicode_data:

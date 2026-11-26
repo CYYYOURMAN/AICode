@@ -7,8 +7,8 @@
 
 ## 0. 前置检查
 - 确认是 Linux（NAS 的 Linux 或云主机都行），`uname -a` 能跑；
-  **如果是 Windows**：先按 [Windows 版指南](deploy-windows.md) 装好 WSL2 + 镜像网络 + Docker，
-  再回到本文第 0 节继续（Windows 不能直接跑 host 网络）；
+  **如果是 Windows**：别照这份做，走 [Windows 版指南](deploy-windows.md)（Docker Desktop +
+  `docker-compose.windows.yml`）。Windows 不支持 host 网络，启动命令和这份不一样；
 - 确认有 Docker 和 docker compose v2：`docker --version`、`docker compose version`；
   没有就先装（Debian/Ubuntu）：`apt install docker.io docker-compose-v2`；
   当前用户要能用 docker：`docker info` 报权限错误时，`sudo usermod -aG docker $USER` 后重新登录；
