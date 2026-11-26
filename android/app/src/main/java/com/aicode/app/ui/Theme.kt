@@ -36,9 +36,9 @@ object AppColors {
 
     // 深色层：底 → 卡 → 高亮卡（中性灰黑，跟网页 #151517 那套一致，不带绿）
     val DarkBg = Color(0xFF151517)
-    val DarkCard = Color(0xFF1B1B1C)
-    val DarkCardHigh = Color(0xFF232324)
-    val DarkLine = Color(0xFF2C2C2E)
+    val DarkCard = Color(0xFF232324)
+    val DarkCardHigh = Color(0xFF2C2C2E)
+    val DarkLine = Color(0xFF353638)
 
     // 浅色层：雾蓝底、白卡、淡蓝灰线
     val LightBg = Color(0xFFE2ECF4)
@@ -89,29 +89,29 @@ fun accentColor(accent: AppAccent, dark: Boolean): Color = when (accent) {
 private val DarkColors = darkColorScheme(
     primary = AppColors.TealMint,
     onPrimary = Color(0xFF06211B),
-    primaryContainer = Color(0xFF1B3A34),
-    onPrimaryContainer = Color(0xFFC9EFE4),
-    secondary = Color(0xFF8FD9C6),
-    onSecondary = Color(0xFF04241F),
-    secondaryContainer = Color(0xFF143A34),
-    onSecondaryContainer = Color(0xFFD2F4EC),
+    primaryContainer = Color(0xFF2C2C2E),
+    onPrimaryContainer = Color(0xFFF9FAFB),
+    secondary = Color(0xFFCAD2DB),
+    onSecondary = Color(0xFF151517),
+    secondaryContainer = Color(0xFF353638),
+    onSecondaryContainer = Color(0xFFF9FAFB),
     tertiary = AppColors.Amber,
     onTertiary = Color(0xFF2A1A05),
     tertiaryContainer = Color(0xFF3D2A12),
     onTertiaryContainer = Color(0xFFFFE7C7),
     background = AppColors.DarkBg,
-    onBackground = Color(0xFFF2F2F4),
+    onBackground = Color(0xFFF9FAFB),
     surface = AppColors.DarkBg,
-    onSurface = Color(0xFFF2F2F4),
-    surfaceVariant = Color(0xFF1F1F22),
-    onSurfaceVariant = Color(0xFF979DA6),
+    onSurface = Color(0xFFF9FAFB),
+    surfaceVariant = Color(0xFF2C2C2E),
+    onSurfaceVariant = Color(0xFFADB2B8),
     outline = Color(0xFF353638),
     outlineVariant = AppColors.DarkLine,
-    error = Color(0xFFFF7A7A),
-    onError = Color(0xFF2C0A0A),
-    errorContainer = Color(0xFF47140F),
-    onErrorContainer = Color(0xFFFFDAD6),
-    inverseSurface = Color(0xFFF2F2F4),
+    error = Color(0xFFF25A5A),
+    onError = Color(0xFF1B1B1C),
+    errorContainer = Color(0xFF570C0C),
+    onErrorContainer = Color(0xFFFEE2E2),
+    inverseSurface = Color(0xFFF9FAFB),
     inverseOnSurface = Color(0xFF151517),
     inversePrimary = Color(0xFF2F4F48),
     scrim = Color(0xCC000000),
