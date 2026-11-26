@@ -849,11 +849,16 @@ private fun AppShell(
                     }
                 }
             }
-            // 重复点「我的」= 回到一级列表（在二级页时点底栏能退出去，2026-11-26）
+            // 重复点同一个标签：对话页 = 刷新网页（重新取 token 再加载，网页样式/内容更新后不用杀进程），
+            // 「我的」= 回到一级列表（在二级页时点底栏能退出去）。2026-11-26 用户要求。
             PageSwitcherBar(
                 current = page,
                 onSelect = {
-                    if (it == "settings" && page == "settings") settingsKey++ else page = it
+                    when {
+                        it == "settings" && page == "settings" -> settingsKey++
+                        it == "web" && page == "web" -> webRetryKey++
+                        else -> page = it
+                    }
                 },
             )
         }

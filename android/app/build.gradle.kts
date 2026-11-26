@@ -23,8 +23,8 @@ android {
         applicationId = "com.aicode.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 172
-        versionName = "0.13.16"
+        versionCode = 174
+        versionName = "0.13.18"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
