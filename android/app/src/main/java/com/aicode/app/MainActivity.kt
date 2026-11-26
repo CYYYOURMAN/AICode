@@ -745,6 +745,17 @@ private fun AppShell(
 
     LaunchedEffect(Unit) {
         loadEngine()
+    }
+
+    // 网页主题（服务端 ui-theme）要跟 App 深浅走：以前只在启动时同步一次，且引擎还没连上就直接跳过，
+    // 于是「App 浅色 + 网页深色」会一直卡着（2026-11-26 用户看到深色输入框漂在浅色页面里）。
+    // 这里按 dark 变化触发，先等 cookie 到位再发；切深浅/跟随系统都走这里。
+    LaunchedEffect(dark) {
+        var waited = 0
+        while ((client == null || cookie == null) && waited < 80) {
+            kotlinx.coroutines.delay(250)
+            waited++
+        }
         syncDshTheme(dark)
     }
 
@@ -802,7 +813,7 @@ private fun AppShell(
                             onRefresh = { scope.launch { loadEngine() } },
                             onThemeChange = { value ->
                                 onThemeChange(value)
-                                scope.launch { syncDshTheme(value) }
+                                // 主题同步交给上面的 LaunchedEffect(dark)，这里不再重复发
                             },
                             onReconnect = onReconnect,
                             onNavigate = { page = it },

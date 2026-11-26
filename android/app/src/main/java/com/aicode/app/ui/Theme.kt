@@ -34,11 +34,11 @@ object AppColors {
     val Blue = TealDeep
     val BlueBright = TealMint
 
-    // 深色层：底 → 卡 → 高亮卡
-    val DarkBg = Color(0xFF0D1415)
-    val DarkCard = Color(0xFF182323)
-    val DarkCardHigh = Color(0xFF1F2B2B)
-    val DarkLine = Color(0xFF253332)
+    // 深色层：底 → 卡 → 高亮卡（中性灰黑，跟网页 #151517 那套一致，不带绿）
+    val DarkBg = Color(0xFF151517)
+    val DarkCard = Color(0xFF1B1B1C)
+    val DarkCardHigh = Color(0xFF232324)
+    val DarkLine = Color(0xFF2C2C2E)
 
     // 浅色层：雾蓝底、白卡、淡蓝灰线
     val LightBg = Color(0xFFE2ECF4)
@@ -100,19 +100,19 @@ private val DarkColors = darkColorScheme(
     tertiaryContainer = Color(0xFF3D2A12),
     onTertiaryContainer = Color(0xFFFFE7C7),
     background = AppColors.DarkBg,
-    onBackground = Color(0xFFE4EEEA),
+    onBackground = Color(0xFFF2F2F4),
     surface = AppColors.DarkBg,
-    onSurface = Color(0xFFE4EEEA),
-    surfaceVariant = Color(0xFF16201F),
-    onSurfaceVariant = Color(0xFF93A6A3),
-    outline = Color(0xFF2A3A38),
+    onSurface = Color(0xFFF2F2F4),
+    surfaceVariant = Color(0xFF1F1F22),
+    onSurfaceVariant = Color(0xFF979DA6),
+    outline = Color(0xFF353638),
     outlineVariant = AppColors.DarkLine,
     error = Color(0xFFFF7A7A),
     onError = Color(0xFF2C0A0A),
     errorContainer = Color(0xFF47140F),
     onErrorContainer = Color(0xFFFFDAD6),
-    inverseSurface = Color(0xFFE4EEEA),
-    inverseOnSurface = Color(0xFF0D1415),
+    inverseSurface = Color(0xFFF2F2F4),
+    inverseOnSurface = Color(0xFF151517),
     inversePrimary = Color(0xFF2F4F48),
     scrim = Color(0xCC000000),
 )
@@ -212,7 +212,7 @@ fun AicodeTheme(
 /** 全屏底色渐变：铺满整屏（含状态栏/导航栏区域），网页端 body 透明，两边同一层底色。 */
 @Composable
 fun appBackgroundBrush(): Brush = if (LocalIsDark.current) {
-    Brush.verticalGradient(listOf(Color(0xFF0C1213), Color(0xFF111B1C), Color(0xFF0F1718)))
+    Brush.verticalGradient(listOf(Color(0xFF101011), Color(0xFF151517), Color(0xFF121214)))
 } else {
     Brush.verticalGradient(listOf(Color(0xFFDFEAF2), Color(0xFFEAF2F7), Color(0xFFF5FAFC)))
 }

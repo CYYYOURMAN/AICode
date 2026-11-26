@@ -219,6 +219,13 @@ object PhoneBridge {
                 out.put("found", found)
                 found
             }
+            "notify" -> {
+                val t = cmd.optString("title").ifEmpty { "管家" }
+                val body = cmd.optString("text")
+                notifyAlert(ctx, t, body)
+                out.put("notified", true)
+                true
+            }
             else -> {
                 out.put("error", "未知动作 $action")
                 false
@@ -259,6 +266,50 @@ object PhoneBridge {
         "recents" -> "打开最近任务"
         "notifications" -> "下拉通知栏"
         else -> action
+    }
+
+    /**
+     * 服务器主动推一条通知到手机（管家告警用）。
+     * 渠道复用 NotificationWatcher 的 aicode-watch；不是无障碍动作，但轮询靠 ControlService 驱动。
+     */
+    private fun notifyAlert(ctx: Context, title: String, text: String) {
+        val ch = "aicode-watch"
+        val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+        if (android.os.Build.VERSION.SDK_INT >= 26) {
+            nm.createNotificationChannel(
+                android.app.NotificationChannel(ch, "管家告警", android.app.NotificationManager.IMPORTANCE_HIGH)
+            )
+        }
+        val flags = if (android.os.Build.VERSION.SDK_INT >= 23) {
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+        } else {
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT
+        }
+        val pi = android.app.PendingIntent.getActivity(
+            ctx,
+            title.hashCode(),
+            android.content.Intent(ctx, MainActivity::class.java).apply {
+                addFlags(
+                    android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
+                        android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                        android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP
+                )
+            },
+            flags
+        )
+        val b = if (android.os.Build.VERSION.SDK_INT >= 26) {
+            android.app.Notification.Builder(ctx, ch)
+        } else {
+            @Suppress("DEPRECATION")
+            android.app.Notification.Builder(ctx)
+        }
+        val n = b.setContentTitle(title)
+            .setContentText(text)
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentIntent(pi)
+            .setAutoCancel(true)
+            .build()
+        nm.notify(("butler-" + title).hashCode(), n)
     }
 
     private fun post(url: String, body: String) {
