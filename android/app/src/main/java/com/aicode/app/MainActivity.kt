@@ -56,6 +56,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.key
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -279,6 +280,8 @@ private fun AppShell(
     var webAuthRetry by remember { mutableIntStateOf(0) }
     var fileCallback by remember { mutableStateOf<ValueCallback<Array<Uri>>?>(null) }
     var popupView by remember { mutableStateOf<WebView?>(null) }
+    // 渲染进程崩溃后重建 WebView 用：递增会让 remember 换一个新实例（见 onRenderProcessGone）
+    var webGeneration by remember { mutableIntStateOf(0) }
 
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         val cb = fileCallback
@@ -293,8 +296,10 @@ private fun AppShell(
 
     // WebView 常驻：切页面不重建、不重新加载，回来还是原来那页
     @SuppressLint("SetJavaScriptEnabled")
-    val webView = remember {
+    val webView = remember(webGeneration) {
         WebView(ctx).apply {
+            // 手机控制（AI 操作手机）要往这个 WebView 的输入框里打字：注册给 WebInputBridge
+            WebInputBridge.attach(this)
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -391,8 +396,24 @@ private fun AppShell(
                         }
                     }
                 }
+
+                override fun onRenderProcessGone(
+                    view: WebView?,
+                    detail: android.webkit.RenderProcessGoneDetail?,
+                ): Boolean {
+                    // 渲染进程被系统回收/崩溃：默认会让 App 一起退出（闪退）。
+                    // 返回 true 接管：丢掉旧 WebView，递增 webGeneration 换新实例，再重新取 token 加载。
+                    runCatching {
+                        (view?.parent as? ViewGroup)?.removeView(view)
+                        view?.destroy()
+                    }
+                    webGeneration++
+                    webRetryKey++
+                    return true
+                }
             }
             webChromeClient = object : WebChromeClient() {
+
                 // 登录等 window.open 弹窗：用一个覆盖层 WebView 承载，回调完成后自动关闭
                 override fun onCreateWindow(
                     view: WebView?,
@@ -681,6 +702,7 @@ private fun AppShell(
                     when (current) {
                         "web" -> WebPage(
                             webView = webView,
+                            generation = webGeneration,
                             loading = webLoading,
                             loaded = webEverLoaded,
                             error = webError,
@@ -806,13 +828,16 @@ private fun PageSwitcherBar(current: String, onSelect: (String) -> Unit, backgro
 @Composable
 private fun WebPage(
     webView: WebView,
+    generation: Int,
     loading: Boolean,
     loaded: Boolean,
     error: String?,
     onRetry: () -> Unit,
 ) {
     Box(Modifier.fillMaxSize()) {
-        AndroidView(factory = { webView }, modifier = Modifier.fillMaxSize())
+        key(generation) {
+            AndroidView(factory = { webView }, modifier = Modifier.fillMaxSize())
+        }
         // 冷启动：第一次连上之前先画一个启动页，别让用户对着白屏
         if (!loaded && error == null) {
             Column(

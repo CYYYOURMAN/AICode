@@ -7,13 +7,19 @@ import java.net.Socket
 import kotlin.concurrent.thread
 
 /**
- * 本地回环转发：127.0.0.1:3080 -> 引擎（Tailscale 或局域网里的 3080）。
+ * 本地回环转发：127.0.0.1:<引擎端口> -> 引擎（Tailscale 或局域网里的同一个端口）。
  * 目的：让 WebView 里的页面 origin 是回环地址，满足 DeepSeek 平台 OAuth 回调只认 127.0.0.1/localhost 的限制。
+ * 监听端口必须跟目标引擎端口一致：WebView 打开的是 http://127.0.0.1:<引擎端口>（见 MainActivity.localizeBase）。
  * 纯 TCP 转发，对上层 HTTP/SSE 透明。
  */
 object LocalProxy {
     private const val LISTEN_HOST = "127.0.0.1"
-    private const val LISTEN_PORT = 3080
+    /** 默认端口；实际监听端口跟随目标引擎端口（见 [start]）。 */
+    private const val DEFAULT_LISTEN_PORT = 3080
+
+    /** 当前监听端口。引擎端口改过（.env 的 DSH_PORT）时必须跟着变，否则网页打不开——2026-11-26 真机验证发现。 */
+    @Volatile
+    private var listenPort: Int = DEFAULT_LISTEN_PORT
 
     /** bind 失败后重试次数（首次之外），每次间隔 300ms。 */
     private const val BIND_RETRIES = 3
@@ -44,6 +50,7 @@ object LocalProxy {
         stop()
         targetHost = host
         targetPort = port
+        listenPort = port
         lastError = null
         running = true
         val ready = java.util.concurrent.CountDownLatch(1)
@@ -56,7 +63,7 @@ object LocalProxy {
                 val ss = ServerSocket()
                 try {
                     ss.reuseAddress = true
-                    ss.bind(InetSocketAddress(LISTEN_HOST, LISTEN_PORT))
+                    ss.bind(InetSocketAddress(LISTEN_HOST, listenPort))
                     bound = ss
                     break
                 } catch (e: Throwable) {
@@ -75,7 +82,7 @@ object LocalProxy {
             if (ss == null) {
                 // stop() 主动取消时不算绑定失败，避免把「切目标」误报成错误。
                 if (running) {
-                    lastError = "绑定 " + LISTEN_HOST + ":" + LISTEN_PORT + " 失败：" + (last ?: "未知原因")
+                    lastError = "绑定 " + LISTEN_HOST + ":" + listenPort + " 失败：" + (last ?: "未知原因")
                     running = false
                 }
                 serverSocket = null

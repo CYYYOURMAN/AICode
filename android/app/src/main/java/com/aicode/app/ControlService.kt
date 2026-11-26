@@ -1,5 +1,7 @@
 package com.aicode.app
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.graphics.Path
@@ -38,7 +40,7 @@ class ControlService : AccessibilityService() {
         loopScope.launch {
             while (isActive) {
                 runCatching { PhoneBridge.tick(applicationContext) }
-                delay(1000)
+                delay(200)
             }
         }
     }
@@ -229,29 +231,52 @@ class ControlService : AccessibilityService() {
         if (node == null) node = activeRoot()?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
         val n = node ?: return null
         n.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+        // App 自己的 WebView 输入框（DSH 网页）不认无障碍动作：先走 JS 桥。
+        // 必须放在 SET_TEXT / PASTE 之前——那两个动作对 WebView 可能「返回 true 但没生效」，
+        // 会把桥跳过（2026-11-26 实测：加了 PASTE 兜底后桥一次都没被调用）。
+        if (WebInputBridge.enterText(text)) return text
         val args = Bundle()
         args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
         if (n.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)) return text
         if (tapBounds(n)) {
-            val focused = activeRoot()?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: return null
-            if (focused.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)) return text
+            val focused = activeRoot()?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+            if (focused != null && focused.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)) return text
         }
+        // WebView 里的输入框（contenteditable）不认 ACTION_SET_TEXT：退回「剪贴板 + 粘贴」。
+        // 2026-11-26 真机发现：App 内嵌的 DSH 网页输入框，手机控制打不进字（登录框、聊天框都会踩）。
+        if (pasteInto(n, text)) return text
         return null
     }
 
-    fun scrollDir(dir: String): String? {
-        // 手势滑动比 performAction(SCROLL_*) 可靠：很多列表（系统设置等）会返回 true 但完全不移动。
-        // 滑动距离按屏幕自适应（四分之一屏），不会滑过头。
-        if (swipeDir(dir)) return dir
-        val root = activeRoot()
-        val target = root?.let { findScrollable(it, 0) } ?: return null
-        val forward = dir != "back" && dir != "down"
-        val action = if (forward) {
-            AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
-        } else {
-            AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
+    /**
+     * 用剪贴板 + ACTION_PASTE 往输入框里塞文字。
+     * 只给不认 ACTION_SET_TEXT 的节点（典型是 WebView 的 contenteditable）兜底用。
+     * 注意：会覆盖当前剪贴板内容。
+     */
+    private fun pasteInto(n: AccessibilityNodeInfo, text: String): Boolean {
+        return try {
+            val cm = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+            cm.setPrimaryClip(ClipData.newPlainText("aicode-type", text))
+            n.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+            n.performAction(AccessibilityNodeInfo.ACTION_PASTE)
+        } catch (_: Throwable) {
+            false
         }
-        return if (target.performAction(action)) dir else null
+    }
+
+    fun scrollDir(dir: String): String? {
+        val root = activeRoot()
+        val target = root?.let { findScrollable(it, 0) }
+        if (target != null) {
+            val forward = dir != "back" && dir != "down"
+            val action = if (forward) {
+                AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
+            } else {
+                AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
+            }
+            if (target.performAction(action)) return dir
+        }
+        return if (swipeDir(dir)) dir else null
     }
 
     fun swipeDir(dir: String): Boolean {
@@ -394,21 +419,6 @@ class ControlService : AccessibilityService() {
         fun home(): Boolean = instance?.performGlobalAction(GLOBAL_ACTION_HOME) ?: false
         fun recents(): Boolean = instance?.performGlobalAction(GLOBAL_ACTION_RECENTS) ?: false
         fun notifications(): Boolean = instance?.performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS) ?: false
-
-        /** 系统里无障碍服务是否真的开着。
-         *  instance 只是「本进程里的服务实例」，进程被杀后为空但系统授权还在——不能拿它判断。
-         */
-        fun isEnabledInSystem(ctx: android.content.Context): Boolean {
-            val am = runCatching {
-                ctx.getSystemService(android.content.Context.ACCESSIBILITY_SERVICE)
-                    as? android.view.accessibility.AccessibilityManager
-            }.getOrNull() ?: return false
-            return runCatching {
-                am.getEnabledAccessibilityServiceList(
-                    android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_ALL_MASK,
-                ).any { it.resolveInfo?.serviceInfo?.packageName == ctx.packageName }
-            }.getOrDefault(false)
-        }
 
         /** 一键修复：App 更新/重启后系统可能把无障碍服务关掉，用 root 重新写回设置。 */
         fun repairAccessibility(ctx: android.content.Context): Boolean {
