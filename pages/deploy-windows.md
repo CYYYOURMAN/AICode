@@ -2,6 +2,10 @@
 
 > Windows 版和 Linux 版的差别只有两处：**用 Docker Desktop**、**用 `docker-compose.windows.yml`**（bridge 网络 + 端口映射）。
 > 其余步骤（配 key、拿配对码、验证、交付）和 [Linux 版](deploy-for-ai.md) 完全一样。
+>
+> **已在 Windows 10 22H2 + Docker Desktop 4.99 上实机验证过**（2026-11-26）：
+> 装 Docker → 配镜像加速 → 构建 → 容器起来 → 手机配对 → App 打开网页 → 发消息得到 AI 回复，全流程跑通。
+> 本文下面标「必做」的地方都是那次踩出来的，跳过会卡住。
 
 ## 0. 前提
 
