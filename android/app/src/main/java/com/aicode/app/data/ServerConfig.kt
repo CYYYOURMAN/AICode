@@ -19,6 +19,8 @@ object ServerConfig {
     private const val KEY_BASE = "base"
     private const val KEY_BASE_ALT = "base_alt"
     private const val KEY_SECRET = "secret"
+    private const val KEY_HUB_URL = "hub_url"
+    private const val KEY_HUB_TOKEN = "hub_token"
     private const val KEY_MCP_URL = "mcp_url"
     private const val KEY_MCP_TOKEN = "mcp_token"
     private const val KEY_MCP_ENABLED = "mcp_enabled"
@@ -57,6 +59,19 @@ object ServerConfig {
 
     fun clear(ctx: Context) {
         prefs(ctx).edit().remove(KEY_BASE).remove(KEY_SECRET).apply()
+    }
+
+    /** AI 中枢地址；未配置返回 ""（App 按服务器 host 推 8310）。 */
+    fun hubUrl(ctx: Context): String = prefs(ctx).getString(KEY_HUB_URL, "") ?: ""
+
+    /** AI 中枢令牌；未配置返回 ""（App 会尝试用 DSH 令牌换）。 */
+    fun hubToken(ctx: Context): String = prefs(ctx).getString(KEY_HUB_TOKEN, "") ?: ""
+
+    fun saveHub(ctx: Context, url: String, token: String) {
+        prefs(ctx).edit()
+            .putString(KEY_HUB_URL, url.trim())
+            .putString(KEY_HUB_TOKEN, token.trim())
+            .apply()
     }
 
     /** MCP 地址；未配置返回 ""。原样返回，不补协议。 */

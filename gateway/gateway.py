@@ -166,6 +166,14 @@ def latest_token() -> str:
         return ""
 
 
+def fish_token() -> str:
+    """鱼世界 MCP 的访问令牌。App 配对后用它自动填好「鱼世界」设置（2026-11-26 加）。"""
+    try:
+        return pathlib.Path('/home/server/.dsh/secrets/fish-world.token').read_text(encoding='utf-8').strip()
+    except OSError:
+        return ''
+
+
 def app_base(handler) -> str:
     """返回 App 应该连接的 DSH 引擎地址。
 
@@ -317,7 +325,8 @@ class Handler(BaseHTTPRequestHandler):
             return
         # 默认：给 App 的登录信息
         self._json({"token": latest_token(), "base": app_base(self),
-                    "phone": PHONE_ENABLED, "exec": EXEC_ENABLED})
+                    "phone": PHONE_ENABLED, "exec": EXEC_ENABLED,
+                    "fishToken": fish_token()})
 
     # ---- POST ----
     def do_POST(self):

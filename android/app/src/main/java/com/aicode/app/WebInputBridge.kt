@@ -30,6 +30,9 @@ object WebInputBridge {
     fun attach(wv: WebView) {
         ref = WeakReference(wv)
         appCtx = wv.context.applicationContext
+        // 手机控制按 DOM 语义点击也挂在同一个入口：MainActivity 已经在调 attach，
+        // 不用再改它（2026-11-28 与键盘修复并行时特意这样接）。
+        WebDomBridge.attach(wv)
     }
 
     /**

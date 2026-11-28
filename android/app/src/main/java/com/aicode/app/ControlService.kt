@@ -220,6 +220,27 @@ class ControlService : AccessibilityService() {
         return null
     }
 
+    /**
+     * 只点文字/描述「精确等于」text 的控件（DOM 未匹配时的安全回退）。
+     *
+     * 为什么不用 [tapText]：它走 findAccessibilityNodeInfosByText，是「包含」匹配，
+     * 空输入时点「发送消息」会先命中含这四个字的历史消息正文（2026-11-28 独立验证实测）。
+     * 回退只认精确同名，宁可报找不到，也不把消息点开。
+     */
+    fun tapTextExact(text: String): String? {
+        if (text.isEmpty()) return null
+        val matches = findByTextOrDesc(text).filter { n ->
+            n.text?.toString()?.trim() == text ||
+                n.contentDescription?.toString()?.trim() == text
+        }
+        for (n in matches) {
+            val target = clickableAncestor(n) ?: n
+            if (safeClick(target)) return textOf(n).ifEmpty { text }
+            if (tapBounds(target)) return textOf(n).ifEmpty { text }
+        }
+        return null
+    }
+
     fun typeText(target: String?, text: String): String? {
         var node: AccessibilityNodeInfo? = null
         if (!target.isNullOrEmpty()) {
@@ -229,12 +250,15 @@ class ControlService : AccessibilityService() {
             }
         }
         if (node == null) node = activeRoot()?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
-        val n = node ?: return null
-        n.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+        val n = node
+        n?.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
         // App 自己的 WebView 输入框（DSH 网页）不认无障碍动作：先走 JS 桥。
         // 必须放在 SET_TEXT / PASTE 之前——那两个动作对 WebView 可能「返回 true 但没生效」，
         // 会把桥跳过（2026-11-26 实测：加了 PASTE 兜底后桥一次都没被调用）。
+        // 也不要求 n != null：WebView 的 contenteditable 可能压根不在无障碍树里
+        //（findFocus 返回 null，2026-11-28 长会话页实测），DOM 已聚焦时 JS 桥照样能写。
         if (WebInputBridge.enterText(text)) return text
+        if (n == null) return null
         val args = Bundle()
         args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
         if (n.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)) return text
@@ -357,6 +381,18 @@ class ControlService : AccessibilityService() {
         rootInActiveWindow
     } catch (_: Throwable) {
         null
+    }
+
+    /**
+     * 当前前台窗口的包名。
+     *
+     * 给 PhoneBridge 判断「是不是 App 自己的网页页」用：是才走 WebDomBridge 按 DOM 点，
+     * 免得在别的 App 里误点后台的网页（App 切到设置页时 WebView 仍然存在）。
+     */
+    fun rootPackage(): String = try {
+        rootInActiveWindow?.packageName?.toString().orEmpty()
+    } catch (_: Throwable) {
+        ""
     }
 
     private fun clickableAncestor(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {

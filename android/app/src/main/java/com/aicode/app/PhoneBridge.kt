@@ -124,7 +124,25 @@ object PhoneBridge {
                 true
             }
             "snapshot" -> {
-                out.put("data", svc.snapshotJson())
+                val snap = svc.snapshotJson()
+                // App 自己的网页页：无障碍 bounds 在长会话页会塌缩（实测 [x,116,x,116]），
+                // 补一份 DOM 控件列表，phone 里显示为「DOM」。别的 App 不碰后台网页。
+                val own = svc.rootPackage()
+                val hasView = WebDomBridge.hasWebView()
+                val vis = WebDomBridge.visible()
+                val dom = if (own == ctx.packageName && vis) WebDomBridge.snapshot() else null
+                if (dom != null && dom.length() > 0) snap.put("dom", dom)
+                // 诊断字段：DOM 桥没生效时，一眼看出卡在哪一步（rootPackage / attach / 可见性 / JS）
+                snap.put(
+                    "domDebug",
+                    JSONObject()
+                        .put("own", own)
+                        .put("self", ctx.packageName)
+                        .put("hasView", hasView)
+                        .put("visible", vis)
+                        .put("domN", dom?.length() ?: -1),
+                )
+                out.put("data", snap)
                 true
             }
             "shot" -> {
@@ -148,21 +166,98 @@ object PhoneBridge {
             "tap" -> {
                 val ref = cmd.optString("ref")
                 val text = cmd.optString("text")
-                val label = when {
-                    ref.isNotEmpty() -> svc.tapRef(ref)
-                    text.isNotEmpty() -> svc.tapText(text)
-                    else -> {
-                        val x = cmd.optDouble("x", -1.0).toFloat()
-                        val y = cmd.optDouble("y", -1.0).toFloat()
-                        if (x >= 0 && y >= 0 && ControlService.tap(x, y)) "坐标" else null
+                val selector = cmd.optString("selector")
+                var label: String? = null
+                var via = ""
+                var fallback = ""
+                var error: String? = null
+                // 1) App 自己的网页页优先走 DOM：按选择器/可见文字点，不碰坐标，
+                //    不受分辨率、滚动位置、键盘动画影响（2026-11-28 长会话页实测）。
+                //    DOM「明确失败」（选择器不存在 / 元素 disabled / 不可见）时直接报错、不回退：
+                //    无障碍是按「包含」匹配文字，空输入时点「发送消息」会点到同名的历史消息
+                //    （2026-11-28 独立验证实测）。只有「不是 App 网页页」才回退无障碍。
+                val domTried = selector.isNotEmpty() || text.isNotEmpty()
+                val domPage = domTried && svc.rootPackage() == ctx.packageName && WebDomBridge.visible()
+                var domReason = ""
+                if (domPage) {
+                    val res = if (selector.isNotEmpty()) {
+                        WebDomBridge.clickSelector(selector)
+                    } else {
+                        WebDomBridge.clickText(text)
                     }
+                    if (res == null) {
+                        domReason = "bridge-unavailable"
+                    } else if (res.optBoolean("ok")) {
+                        label = res.optString("label")
+                            .ifEmpty { res.optString("sel") }
+                            .ifEmpty { if (selector.isNotEmpty()) selector else text }
+                        // 元素不在视口里：JS 先 scrollIntoView 再点（DSH 的 WebView 物理滑动不生效）
+                        via = if (res.optBoolean("scrolled")) "dom-scroll" else "dom"
+                    } else {
+                        domReason = res.optString("reason").ifEmpty { "unknown" }
+                    }
+                    if (label == null) {
+                        // 例外：网页 DOM 里根本没有这段文字，目标可能是网页外的原生控件（标题栏/底部 tab）。
+                        // 只允许「精确同名」的无障碍回退，宁可报错也不做包含匹配。
+                        if (domReason == "not-found" && text.isNotEmpty()) {
+                            label = svc.tapTextExact(text)
+                            if (label != null) {
+                                via = "a11y"
+                                fallback = "dom-not-found"
+                            }
+                        }
+                        if (label == null) error = domError(domReason, selector, text)
+                    }
+                } else if (domTried) {
+                    // 2) 不是 DOM 页面（别的 App / App 的设置页 / 网页不可见）：回退无障碍，标明原因
+                    fallback = "not-dom-page"
+                }
+                // 3) 无障碍回退：ref 永远走这里；文字/坐标兜底
+                if (label == null && !domPage) {
+                    when {
+                        ref.isNotEmpty() -> {
+                            label = svc.tapRef(ref)
+                            if (label != null) via = "a11y"
+                        }
+                        text.isNotEmpty() -> {
+                            label = svc.tapText(text)
+                            if (label != null) via = "a11y"
+                        }
+                        selector.isNotEmpty() -> {
+                            // 选择器只对网页有意义；不在网页页时明确说清楚，不拿无障碍去猜
+                            error = "不在 App 网页页（WebView 不可见），选择器无法使用"
+                        }
+                        else -> {
+                            val x = cmd.optDouble("x", -1.0).toFloat()
+                            val y = cmd.optDouble("y", -1.0).toFloat()
+                            if (x >= 0 && y >= 0 && ControlService.tap(x, y)) {
+                                label = "坐标"
+                                via = "coord"
+                            }
+                        }
+                    }
+                    if (label == null && error == null) error = "没找到可点击的元素"
                 }
                 if (label != null) {
                     OverlayCapsule.show(ctx, "AI 操作中 · 点击「$label」")
                     out.put("label", label)
+                    out.put("via", via)
+                    if (fallback.isNotEmpty()) out.put("fallback", fallback)
                     true
                 } else {
-                    out.put("error", "没找到可点击的元素")
+                    // 失败也带来源：DOM 页失败标 DOM，无障碍失败标 a11y，选择器不在网页页标 unavailable。
+                    // 旧版 App 根本不回 via，phone 会显示「未知/旧版本」。
+                    out.put(
+                        "via",
+                        when {
+                            domPage -> "dom"
+                            ref.isNotEmpty() || text.isNotEmpty() -> "a11y"
+                            selector.isNotEmpty() -> "unavailable"
+                            else -> ""
+                        },
+                    )
+                    if (fallback.isNotEmpty()) out.put("fallback", fallback)
+                    out.put("error", error ?: "没找到可点击的元素")
                     false
                 }
             }
@@ -258,6 +353,24 @@ object PhoneBridge {
             }
         }
         return false
+    }
+
+    /**
+     * DOM 明确失败 → 中文原因。三种原因分开报（未匹配到元素 / disabled / 不可见），
+     * 排障时能直接定位，不再一律「没找到可点击的元素」（2026-11-28 独立验证要求）。
+     */
+    private fun domError(reason: String, selector: String, text: String): String {
+        val target = if (selector.isNotEmpty()) "选择器 $selector" else "文字「$text」"
+        return when (reason) {
+            "selector-not-found" -> "未匹配到元素：网页里找不到$target"
+            "not-found" -> "未匹配到元素：网页里找不到$target"
+            "disabled" -> "匹配到$target，但 disabled（不可点）"
+            "not-visible" -> "匹配到$target，但不可见"
+            "bad-selector" -> "选择器/文字为空或写法不对：$target"
+            "click-error" -> "匹配到$target，但点击抛错"
+            "bridge-unavailable" -> "DOM 桥未响应（网页可能还在加载）"
+            else -> "DOM 点击失败（$reason）"
+        }
     }
 
     private fun actionCn(action: String): String = when (action) {

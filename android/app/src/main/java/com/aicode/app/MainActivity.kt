@@ -24,9 +24,14 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -46,7 +51,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -94,6 +104,7 @@ import com.aicode.app.data.ServerConfig
 import com.aicode.app.data.TokenService
 import com.aicode.app.pages.ConnectScreen
 import com.aicode.app.pages.FilesScreen
+import com.aicode.app.pages.HubScreen
 import com.aicode.app.pages.FishScreen
 import com.aicode.app.pages.SettingsScreen
 import com.aicode.app.pages.TerminalScreen
@@ -268,7 +279,7 @@ class MainActivity : ComponentActivity() {
                         },
                         pendingSession = pendingSession.value,
                         startTab = intent?.getStringExtra("tab")
-                            ?.takeIf { it in listOf("web", "terminal", "files", "settings", "fish") },
+                            ?.takeIf { it in listOf("web", "terminal", "files", "settings", "fish", "hub") },
                         onSessionHandled = { pendingSession.value = null },
                         onReconnect = { configured = false },
                     )
@@ -321,7 +332,10 @@ private fun AppShell(
     val pagePrefs = ctx.getSharedPreferences("aicode", android.content.Context.MODE_PRIVATE)
     // 长按图标的快捷方式会带 tab（startTab），优先于上次停留的页面
     var page by remember {
-        mutableStateOf(startTab ?: (pagePrefs.getString("page", "web") ?: "web"))
+        // hub（AI 中枢）只允许从设置里进：上次停在 hub 时重启回到对话页，
+        // 否则 WebView 一旦加载失败，App 一开就是黑屏且退不出去。
+        val saved = startTab ?: (pagePrefs.getString("page", "web") ?: "web")
+        mutableStateOf(if (saved == "hub") "web" else saved)
     }
     LaunchedEffect(page) {
         pagePrefs.edit().putString("page", page).apply()
@@ -357,6 +371,13 @@ private fun AppShell(
     var popupView by remember { mutableStateOf<WebView?>(null) }
     // 渲染进程崩溃后重建 WebView 用：递增会让 remember 换一个新实例（见 onRenderProcessGone）
     var webGeneration by remember { mutableIntStateOf(0) }
+    // 键盘高度（网页 CSS px）：网页只把输入框上浮这么多，不 resize 整页
+    // 当前发给网页的键盘位移（CSS px）：用普通 holder，不放进 Compose state——键盘动画逐帧更新时
+    // 不能让每一帧都触发一次重组（真机表现为输入框「重复弹几次」）。onPageFinished 重放也读它。
+    val imeShiftHolder = remember { floatArrayOf(0f) }
+    // 最近一次 WindowInsetsAnimation 回调的时间（uptimeMillis）：它活跃时不走兜底防抖路径。
+    val lastImeAnimAt = remember { longArrayOf(0) }
+    var navRestPx by remember { mutableIntStateOf(0) }
 
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         val cb = fileCallback
@@ -425,6 +446,17 @@ private fun AppShell(
                     webEverLoaded = true
                     reconnectTries = 0
                     view?.postDelayed({ webLoading = false }, 450)
+                    // 注入「键盘只上浮输入框」的桥：网页不 resize（resize 会重排消息列表），
+                    // 由 App 把键盘高度写进 CSS 变量，网页只把 composer 平移上去。
+                    view?.evaluateJavascript(IME_BRIDGE_JS, null)
+                    val cur = imeShiftHolder[0]
+                    if (cur > 0) {
+                        view?.postDelayed({
+                            runCatching {
+                                view.evaluateJavascript("window.__dshAppIme&&window.__dshAppIme(" + cur + ")", null)
+                            }
+                        }, 80)
+                    }
                     view?.evaluateJavascript(
                         "(function(){try{var c=getComputedStyle(document.body).backgroundColor;return c||''}catch(e){return ''}})()",
                     ) { value -> parseCssColor(value)?.let { webBackground = it } }
@@ -788,8 +820,108 @@ private fun AppShell(
                 ),
             ),
     )
+    // 键盘弹起时隐藏底部 Dock：Dock 留在 Column 里会被 imePadding 推着走——
+    // 第一次弹起被键盘整个盖住、之后又浮在键盘上方，两次位置不一致（用户 2026-11-26 反馈）。
+    @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+    val imeVisible = WindowInsets.isImeVisible
+    // 键盘弹起时内容区不再跟着变矮（2026-11-28 修「对话页键盘弹起整页重排」）：
+    // 以前 Column 上挂 imePadding()、dockPad 又从 74dp 动画到 0，WebView 高度被连续压缩 → 网页 resize →
+    // 消息列表重排/滚动位置变化（用户录屏 2.21s 处）。现在内容区高度恒定（底部固定给 Dock 留 74dp），
+    // 键盘高度通过 JS 注入给网页，只让网页里的输入框浮上去，消息列表一个像素都不动。
+    val dockPad = 74.dp
+    // 键盘高度换算成网页 CSS px（WebView 的 CSS px = dp）：给网页注入用。
+    val densityNow = androidx.compose.ui.platform.LocalDensity.current
+    val dockPx = with(densityNow) { dockPad.toPx() }
+    val imeBottomPx = WindowInsets.ime.getBottom(densityNow)
+    val navBottomPx = WindowInsets.navigationBars.getBottom(densityNow)
+    // 键盘收起时记下导航栏高度：弹起后导航栏被键盘盖住，insets 会变 0，不能拿它现算。
+    if (imeBottomPx == 0) navRestPx = navBottomPx
+    // 用 Float（不取整）驱动 transform：取整会让每帧跳 1-2px，视觉上有台阶。
+    fun pushShiftPx(shiftPx: Float) {
+        if (kotlin.math.abs(shiftPx - imeShiftHolder[0]) < 0.5f) return
+        imeShiftHolder[0] = shiftPx
+        webView.evaluateJavascript(
+            "window.__dshAppIme&&window.__dshAppIme(" + String.format(java.util.Locale.US, "%.2f", shiftPx) + ")",
+            null,
+        )
+    }
+    // Android 11+：键盘动画逐帧跟随。onProgress 给的 ime inset 是**插值后的当前值**（单调），
+    // 比 Compose 的 WindowInsets.ime（阶梯上报）平滑，也不会「重复弹几次」；transform 是合成层，不重排。
+    LaunchedEffect(webView) {
+        // 让 WebView 收不到 ime insets：Chromium 就不会在键盘弹起时缩 visual viewport（页面重排、
+        // 自动滚到底都来自它）。页面布局完全不动，只靠上面的 transform 平移；状态栏/导航栏照常传。
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(webView) { _, insets ->
+            if (insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.ime()).bottom > 0) {
+                androidx.core.view.WindowInsetsCompat.Builder(insets)
+                    .setInsets(androidx.core.view.WindowInsetsCompat.Type.ime(), androidx.core.graphics.Insets.NONE)
+                    .build()
+            } else {
+                insets
+            }
+        }
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            androidx.core.view.ViewCompat.setWindowInsetsAnimationCallback(
+                webView,
+                object : androidx.core.view.WindowInsetsAnimationCompat.Callback(
+                    androidx.core.view.WindowInsetsAnimationCompat.Callback.DISPATCH_MODE_CONTINUE_ON_SUBTREE,
+                ) {
+                    override fun onProgress(
+                        insets: androidx.core.view.WindowInsetsCompat,
+                        runningAnimations: MutableList<androidx.core.view.WindowInsetsAnimationCompat>,
+                    ): androidx.core.view.WindowInsetsCompat {
+                        if (runningAnimations.any { it.typeMask == androidx.core.view.WindowInsetsCompat.Type.ime() }) {
+                            lastImeAnimAt[0] = android.os.SystemClock.uptimeMillis()
+                            val b = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.ime()).bottom
+                            pushShiftPx((b - navRestPx - dockPx).coerceAtLeast(0f) / densityNow.density)
+                        }
+                        return insets
+                    }
+
+                    override fun onEnd(animation: androidx.core.view.WindowInsetsAnimationCompat) {
+                        // 动画最后一帧可能差 1-2px：按终值补一次，避免停下时轻微跳动。
+                        if (animation.typeMask != androidx.core.view.WindowInsetsCompat.Type.ime()) return
+                        val ins = androidx.core.view.ViewCompat.getRootWindowInsets(webView) ?: return
+                        val b = ins.getInsets(androidx.core.view.WindowInsetsCompat.Type.ime()).bottom
+                        lastImeAnimAt[0] = android.os.SystemClock.uptimeMillis()
+                        pushShiftPx((b - navRestPx - dockPx).coerceAtLeast(0f) / densityNow.density)
+                    }
+                },
+            )
+        }
+    }
+    // 兜底（Android <11 / ROM 不回调动画）：收起立即归零，弹起等 insets 稳定 150ms 再设一次。
+    // 键盘「可见」才上浮：真机出现过键盘收起后 composer 停在半空，用 imeVisible 门控兜底。
+    val rawShift = if (imeVisible && imeBottomPx > 0) {
+        ((imeBottomPx - navRestPx - dockPx).coerceAtLeast(0f) / densityNow.density).toInt()
+    } else 0
+    LaunchedEffect(rawShift) {
+        // 500ms 内有过动画回调 → 动画路径在驱动，兜底不插手（否则会把动画值覆盖成阶梯值）
+        if (android.os.SystemClock.uptimeMillis() - lastImeAnimAt[0] < 500) return@LaunchedEffect
+        if (rawShift == 0) {
+            pushShiftPx(0f)
+        } else {
+            delay(150)
+            pushShiftPx(rawShift.toFloat())
+        }
+    }
     Scaffold(containerColor = androidx.compose.ui.graphics.Color.Transparent) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).imePadding()) {
+        Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)) {
+        // AI 中枢是深色控制台：内容区（包括底部 Dock 后面）铺同色底，
+        // 否则页面在 Dock 上方突然结束，露出一条 App 浅色底，看着像没铺满。
+        if (page == "hub") {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(androidx.compose.ui.graphics.Color(0xFF0A0A0A)),
+            )
+        }
+        Column(
+            Modifier
+                .fillMaxSize()
+                // 只留 Dock 的 74dp；**不再 imePadding**——键盘弹起时内容区（WebView）保持原高度，
+                // 由网页把输入框浮上去（见 IME_BRIDGE_JS），消息列表因此不会被 resize 挤动。
+                .padding(bottom = dockPad),
+        ) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 AnimatedContent(
                     targetState = page,
@@ -816,6 +948,7 @@ private fun AppShell(
                             onRetry = { reconnectTries = 0; webRetryKey++ },
                         )
                         "terminal" -> TerminalScreen(onOpenWeb = { page = "web" })
+                        "hub" -> HubScreen()
                         "files" -> FilesScreen(client = client, cookie = cookie)
                         "settings" -> SettingsScreen(
                             endpoint = endpoint,
@@ -851,16 +984,32 @@ private fun AppShell(
             }
             // 重复点同一个标签：对话页 = 刷新网页（重新取 token 再加载，网页样式/内容更新后不用杀进程），
             // 「我的」= 回到一级列表（在二级页时点底栏能退出去）。2026-11-26 用户要求。
-            PageSwitcherBar(
-                current = page,
-                onSelect = {
-                    when {
-                        it == "settings" && page == "settings" -> settingsKey++
-                        it == "web" && page == "web" -> webRetryKey++
-                        else -> page = it
-                    }
-                },
-            )
+        }
+        // 底部 Dock 浮在内容之上、不参与内容布局（内容区底部 74dp 由 dockPad 预留）：
+        // 键盘收起时 Dock 淡入、留白同步展开，输入框平滑下移一次；
+        // 键盘弹起反过来，不会再出现「输入框坠下来盖住 Dock 再回弹」（用户 2026-11-26 反馈）。
+        Box(
+            Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth(),
+        ) {
+            AnimatedVisibility(
+                visible = !imeVisible,
+                enter = fadeIn(tween(150)) + slideInVertically(tween(200)) { it / 2 },
+                exit = fadeOut(tween(120)) + slideOutVertically(tween(160)) { it / 2 },
+            ) {
+                PageSwitcherBar(
+                    current = page,
+                    onSelect = {
+                        when {
+                            it == "settings" && page == "settings" -> settingsKey++
+                            it == "web" && page == "web" -> webRetryKey++
+                            else -> page = it
+                        }
+                    },
+                )
+            }
+        }
         }
     }
     val popup = popupView
@@ -954,6 +1103,22 @@ private fun PageSwitcherBar(current: String, onSelect: (String) -> Unit) {
         }
     }
 }
+
+/**
+ * 键盘弹起时网页侧的处理（2026-11-28 四修）——只平移会话页的滚动容器：
+ * 消息区和 composer（scrollBody 里的 sticky）一起上移，**一个 transform 驱动全部**，物理上不会不同步：
+ * - 顶部钻到不透明的 _header 底下，不露白；底部露出的区域正好被键盘盖住；
+ * - transform 不改 scrollHeight/scrollTop，不需要 padding、不需要贴底滚动，列表不重排；
+ * - composer 和消息的相对关系不变，「最后一条不被盖」自然满足。
+ * hero（data-phase=hero）不匹配，保持不动。
+ */
+private const val IME_BRIDGE_JS = "(function(){try{" +
+    "if(!document.getElementById('dsh-app-ime')){" +
+    "var s=document.createElement('style');s.id='dsh-app-ime';" +
+    "s.textContent=\".dsh-app-ime-on [class*='_root'][data-phase='active'] [class*='_body'],.dsh-app-ime-on [class*='_embeddedBody'][data-content-phase='active'] [class*='_body']{overflow:hidden}[class*='_root'][data-phase='active'] [data-conversation-scroll],[class*='_embeddedBody'][data-content-phase='active'] [data-conversation-scroll]{transform:translateY(calc(-1 * var(--dsh-app-ime,0px)));transition:transform 16ms linear;will-change:transform}\";" +
+    "(document.head||document.documentElement).appendChild(s)}" +
+    "window.__dshAppIme=function(px){try{var v=Math.max(0,parseFloat(px)||0);var h=document.documentElement;h.style.setProperty('--dsh-app-ime',v+'px');if(v>0)h.classList.add('dsh-app-ime-on');else h.classList.remove('dsh-app-ime-on')}catch(e){}}" +
+    "}catch(e){}})()"
 
 @Composable
 private fun WebPage(

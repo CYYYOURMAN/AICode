@@ -38,7 +38,10 @@ import com.aicode.app.data.ServerConfig
 import com.aicode.app.ui.AicodeCard
 import com.aicode.app.ui.AicodePrimaryButton
 import com.aicode.app.ui.AicodeTheme
+import androidx.activity.compose.rememberLauncherForActivityResult
 import com.aicode.app.ui.AicodeTopBar
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -85,6 +88,22 @@ private fun ConnectForm(ctx: Context, onConnected: () -> Unit) {
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
+
+    // 扫码连接：二维码内容是「http://地址|密钥」，和连接页「粘贴连接信息」同一格式
+    // （2026-11-26 用户要求「扫码就直接连」，不用手输地址和验证码）。
+    val scanLauncher = rememberLauncherForActivityResult(ScanContract()) { result ->
+        val raw = result?.contents?.trim().orEmpty()
+        if (raw.isNotEmpty()) {
+            val parts = raw.split("|")
+            if (parts.size >= 2 && parts[0].trim().startsWith("http") && parts[1].trim().isNotEmpty()) {
+                ServerConfig.save(ctx, normalizeBase(parts[0].trim()), parts[1].trim())
+                ServerConfig.saveAlt(ctx, normalizeBase(altBase.text))
+                onConnected()
+            } else {
+                error = "这个二维码不对。要包含「http://地址|密钥」。"
+            }
+        }
+    }
 
     fun submit() {
         if (busy) return
@@ -234,6 +253,24 @@ private fun ConnectForm(ctx: Context, onConnected: () -> Unit) {
                         loading = busy,
                         onClick = { submit() },
                     )
+                    // 扫码直接连：不用手输地址和验证码（2026-11-26 用户要求）
+                    TextButton(
+                        onClick = {
+                            error = null
+                            runCatching {
+                                scanLauncher.launch(
+                                    ScanOptions()
+                                        .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                                        .setPrompt("扫描 AIcode 连接二维码")
+                                        .setBeepEnabled(false)
+                                        .setOrientationLocked(true),
+                                )
+                            }.onFailure { error = "打不开相机：$it" }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("扫码连接", style = MaterialTheme.typography.labelMedium)
+                    }
                     if (error != null) {
                         Spacer(Modifier.height(12.dp))
                         Text(

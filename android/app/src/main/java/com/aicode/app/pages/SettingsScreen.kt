@@ -146,6 +146,9 @@ fun SettingsScreen(
     val serverBase = remember { ServerConfig.base(ctx) }
     // MCP 配置（地址/密钥/开关）：设置页可改，鱼世界页重新进入后生效
     var mcpUrl by remember { mutableStateOf(ServerConfig.mcpUrl(ctx)) }
+    var hubUrl by remember { mutableStateOf(ServerConfig.hubUrl(ctx)) }
+    var hubToken by remember { mutableStateOf(ServerConfig.hubToken(ctx)) }
+    var showHubDialog by remember { mutableStateOf(false) }
     var mcpToken by remember { mutableStateOf(ServerConfig.mcpToken(ctx)) }
     var mcpEnabled by remember { mutableStateOf(ServerConfig.mcpEnabled(ctx)) }
     var showMcpDialog by remember { mutableStateOf(false) }
@@ -548,6 +551,22 @@ fun SettingsScreen(
                 DividerLine()
                 SettingRow(
                     icon = painterResource(R.drawable.ic_tab_control),
+                    title = "AI 中枢",
+                    subtitle = if (hubUrl.isNotBlank()) hubUrl else "控制台：任务、设备、审计",
+                    value = "›",
+                    onClick = { onNavigate("hub") },
+                )
+                DividerLine()
+                SettingRow(
+                    icon = painterResource(R.drawable.ic_tab_settings),
+                    title = "AI 中枢地址",
+                    subtitle = if (hubUrl.isNotBlank()) "已自定义" else "自动（服务器 8310 端口）",
+                    value = "›",
+                    onClick = { showHubDialog = true },
+                )
+                DividerLine()
+                SettingRow(
+                    icon = painterResource(R.drawable.ic_tab_control),
                     title = "让 AI 操作手机",
                     subtitle = if (a11yEnabled) "已开启" else "未开启",
                     onClick = { subPage = "phone" },
@@ -777,6 +796,53 @@ fun SettingsScreen(
             )
             }
         }
+    }
+
+    if (showHubDialog) {
+        var urlDraft by remember { mutableStateOf(hubUrl) }
+        var tokenDraft by remember { mutableStateOf(hubToken) }
+        AlertDialog(
+            onDismissRequest = { showHubDialog = false },
+            title = { Text("AI 中枢") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = urlDraft,
+                        onValueChange = { urlDraft = it },
+                        label = { Text("地址") },
+                        placeholder = { Text("http://192.168.1.21:8310") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = tokenDraft,
+                        onValueChange = { tokenDraft = it },
+                        label = { Text("令牌（可留空，用当前账号换）") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Text(
+                        "留空地址时自动用服务器的 8310 端口；令牌留空会尝试用当前登录换一个。",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 6.dp, top = 8.dp),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    ServerConfig.saveHub(ctx, urlDraft, tokenDraft)
+                    hubUrl = urlDraft.trim()
+                    hubToken = tokenDraft.trim()
+                    showHubDialog = false
+                }) { Text("保存") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showHubDialog = false }) { Text("取消") }
+            },
+        )
     }
 
     if (showMcpDialog) {
